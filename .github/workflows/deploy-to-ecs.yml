@@ -516,7 +516,7 @@ jobs:
             --group-id $SG_ID \
             --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
         
-        # Add ingress rule for API
+        # Add ingress rule for API - ALLOW FROM ANYWHERE (for now)
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
@@ -533,6 +533,9 @@ jobs:
             --cidr $VPC_CIDR 2>/dev/null || echo "HTTPS ingress may already exist"
         
         echo "VPC CIDR: $VPC_CIDR - Security group now allows HTTPS from VPC for endpoint access"
+        
+        # STORE API SG ID for later use with web tasks
+        echo "API_SG_ID=$SG_ID" >> $GITHUB_ENV
         
         # Verify egress rules
         echo "Verifying security group rules..."
@@ -758,12 +761,32 @@ jobs:
             --group-id $SG_ID_WEB \
             --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
         
-        # Add ingress rule
+        # Add ingress rule for Web (port 80)
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID_WEB \
             --protocol tcp \
             --port 80 \
             --cidr 0.0.0.0/0 2>/dev/null || true
+        
+        # CRITICAL FIX: Allow web tasks to reach API on port 8080
+        echo "⚡ CRITICAL: Allowing web -> API communication on port 8080..."
+        API_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text)
+        
+        if [ "$API_SG_ID" != "None" ] && [ -n "$API_SG_ID" ]; then
+          echo "API Security Group: $API_SG_ID"
+          # Allow API to accept connections from Web security group
+          aws ec2 authorize-security-group-ingress \
+            --group-id $API_SG_ID \
+            --protocol tcp \
+            --port 8080 \
+            --source-group $SG_ID_WEB 2>/dev/null || echo "Web -> API rule already exists"
+          echo "✅ API security group now accepts traffic from Web on port 8080"
+        else
+          echo "⚠️  WARNING: Could not find API security group"
+        fi
         
         # Allow web tasks to access VPC endpoints (ECR)
         echo "Adding VPC endpoint access for web tasks..."
