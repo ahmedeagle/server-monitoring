@@ -296,17 +296,21 @@ jobs:
                   "value": "Data Source=/data/servermonitoring.db"
                 },
                 {
-                  "name": "JWT_ISSUER",
+                  "name": "JwtSettings__Issuer",
                   "value": "ServerMonitoringAPI"
                 },
                 {
-                  "name": "JWT_AUDIENCE",
+                  "name": "JwtSettings__Audience",
                   "value": "ServerMonitoringClient"
+                },
+                {
+                  "name": "JwtSettings__AccessTokenExpirationMinutes",
+                  "value": "60"
                 }
               ],
               "secrets": [
                 {
-                  "name": "JWT_SECRET_KEY",
+                  "name": "JwtSettings__SecretKey",
                   "valueFrom": "arn:aws:secretsmanager:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:secret:servermonitoring/JWT_SECRET_KEY"
                 }
               ],
