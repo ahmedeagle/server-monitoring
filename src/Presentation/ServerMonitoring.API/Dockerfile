@@ -27,6 +27,9 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Create non-root user
 RUN groupadd -r -g 1001 appuser && useradd -r -g appuser -u 1001 appuser
 
+# Create data directory for SQLite database with proper permissions
+RUN mkdir -p /data && chown -R appuser:appuser /data
+
 # Copy from build stage
 COPY --from=build --chown=appuser:appuser /app/publish .
 
