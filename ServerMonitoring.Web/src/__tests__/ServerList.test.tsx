@@ -4,7 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import ServerList from '../pages/ServerList';
 import { serverService } from '../services/serverService';
 
-vi.mock('../services/serverService');
+vi.mock('../services/serverService', () => ({
+  serverService: {
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn()
+  }
+}));
 
 describe('ServerList Component', () => {
   const mockServers = [
@@ -30,12 +38,7 @@ describe('ServerList Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(serverService.getServers).mockResolvedValue({
-      data: mockServers,
-      total: 2,
-      page: 1,
-      pageSize: 10,
-    });
+    vi.mocked(serverService.getAll).mockResolvedValue(mockServers);
   });
 
   it('should render server list', async () => {
