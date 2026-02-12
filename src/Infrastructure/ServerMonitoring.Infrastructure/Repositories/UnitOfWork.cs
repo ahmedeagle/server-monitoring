@@ -6,8 +6,7 @@ using ServerMonitoring.Infrastructure.Data;
 namespace ServerMonitoring.Infrastructure.Repositories;
 
 /// <summary>
-/// Unit of Work implementation coordinating multiple repositories and transactions.
-/// Ensures atomic operations across multiple aggregates following DDD principles.
+/// Unit of Work implementation for repository coordination.
 /// </summary>
 public class UnitOfWork : IUnitOfWork
 {

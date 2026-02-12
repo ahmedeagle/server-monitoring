@@ -4,8 +4,7 @@ using ServerMonitoring.Domain.Interfaces;
 namespace ServerMonitoring.Application.Interfaces;
 
 /// <summary>
-/// Unit of Work pattern interface for managing repositories and transactions.
-/// Coordinates multiple repositories and ensures atomic operations across aggregates.
+/// Unit of Work pattern for managing repositories and transactions.
 /// </summary>
 public interface IUnitOfWork : IDisposable
 {

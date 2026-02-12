@@ -20,18 +20,14 @@ using System.IO.Compression;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =============================================
-// 1. SERILOG CONFIGURATION
-// =============================================
+// Serilog
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// =============================================
-// 2. DATABASE CONFIGURATION
-// =============================================
+// Database
 var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase") || 
                           Environment.GetEnvironmentVariable("UseInMemoryDatabase") == "true";
 
@@ -52,25 +48,17 @@ builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =
     }
 });
 
-// Register IApplicationDbContext
 builder.Services.AddScoped<ServerMonitoring.Application.Interfaces.IApplicationDbContext>(provider => 
     provider.GetRequiredService<ApplicationDbContext>());
 
-// =============================================
-// 3. APPLICATION & INFRASTRUCTURE LAYERS
-// =============================================
+// Application layers
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// =============================================
-// 4. CONTROLLERS & API
-// =============================================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// =============================================
-// 5. JWT AUTHENTICATION & AUTHORIZATION
-// =============================================
+// JWT Auth
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
 
@@ -118,9 +106,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("UserOrAdmin", policy => policy.RequireRole("User", "Admin"));
 });
 
-// =============================================
-// 6. SWAGGER/OpenAPI
-// =============================================
+// Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo 
@@ -130,7 +116,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Enterprise Server Monitoring System with Hangfire & SignalR"
     });
 
-    // JWT Authentication for Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -157,14 +142,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// =============================================
-// 7. SIGNALR
-// =============================================
 builder.Services.AddSignalR();
 
-// =============================================
-// 7. RESPONSE COMPRESSION
-// =============================================
+// Response compression
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -182,9 +162,7 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = CompressionLevel.Fastest;
 });
 
-// =============================================
-// 8. HANGFIRE
-// =============================================
+// Hangfire
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -196,20 +174,13 @@ builder.Services.AddHangfireServer(options =>
     options.WorkerCount = Environment.ProcessorCount * 2;
 });
 
-// Register background job services
 builder.Services.AddScoped<MetricsCollectionJob>();
 builder.Services.AddScoped<AlertProcessingJob>();
 builder.Services.AddScoped<ReportGenerationJob>();
 
-// =============================================
-// 9. HEALTH CHECKS
-// =============================================
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: new[] { "db" });
 
-// =============================================
-// 10. API VERSIONING
-// =============================================
 builder.Services.AddApiVersioning(options =>
 {
     options.DefaultApiVersion = new ApiVersion(1, 0);
@@ -217,9 +188,7 @@ builder.Services.AddApiVersioning(options =>
     options.ReportApiVersions = true;
 }).AddMvc();
 
-// =============================================
-// 11. CORS - Secure configuration
-// =============================================
+// CORS
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
     ?? new[] { "http://localhost:3000", "https://localhost:3000" };
 
@@ -230,10 +199,9 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Required for SignalR
+              .AllowCredentials();
     });
 
-    // Legacy policy for backwards compatibility (should be removed in production)
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -242,11 +210,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-// =============================================
-// 12. MIDDLEWARE
-// =============================================
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddDistributedMemoryCache(); // Add distributed cache for idempotency
+builder.Services.AddDistributedMemoryCache();
 builder.Services.AddScoped<CorrelationIdMiddleware>();
 builder.Services.AddScoped<IdempotencyMiddleware>();
 builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
@@ -254,34 +219,26 @@ builder.Services.AddScoped<RequestResponseLoggingMiddleware>();
 
 var app = builder.Build();
 
-// Seed database on startup
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var authService = scope.ServiceProvider.GetRequiredService<ServerMonitoring.Application.Interfaces.IAuthService>();
     
-    // Ensure database is created (for in-memory)
     if (useInMemoryDatabase)
     {
         await context.Database.EnsureCreatedAsync();
     }
     
-    // Seed data
     await ServerMonitoring.Infrastructure.Seeders.DatabaseSeeder.SeedAsync(context, authService);
     Log.Information("Database seeded successfully");
 }
 
-// =============================================
-// MIDDLEWARE PIPELINE
-// =============================================
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 app.UseMiddleware<RequestResponseLoggingMiddleware>();
 app.UseResponseCompression();
 
-// CORS - Use secure policy (change to "AllowAll" only for local dev without frontend)
 app.UseCors("DefaultCorsPolicy");
 
-// Enable Swagger in all environments for demo purposes
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
@@ -291,28 +248,19 @@ app.UseSwaggerUI(options =>
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<IdempotencyMiddleware>();
-app.UseRateLimiting(); // Rate limiting before authentication
+app.UseRateLimiting();
 
 app.UseHttpsRedirection();
 
-// CRITICAL: Authentication & Authorization must come before MapControllers
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Hangfire Dashboard
 app.UseHangfireDashboard("/hangfire");
-
-// SignalR Hub
 app.MapHub<MonitoringHub>("/hubs/monitoring");
-
-// Health Checks
 app.MapHealthChecks("/health");
 
 app.MapControllers();
 
-// =============================================
-// CONFIGURE HANGFIRE RECURRING JOBS
-// =============================================
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();

@@ -15,18 +15,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Unit of Work - coordinates multiple repositories and transactions
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-
-        // Repositories - Base repository only (ServerRepository already implemented)
         services.AddScoped<IServerRepository, ServerRepository>();
-
-        // Application Services
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMetricsCollector, ResilientMetricsCollector>();
         services.AddScoped<ICacheService, CacheService>();
-
-        // Resilience
         services.AddSingleton<ResiliencePolicies>();
 
         return services;

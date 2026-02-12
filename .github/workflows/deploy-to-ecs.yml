@@ -124,7 +124,6 @@ jobs:
 
     - name: Deploy to ECS
       run: |
-        # Check if service exists
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
         if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
@@ -137,21 +136,17 @@ jobs:
         else
           echo "Creating new service..."
           
-          # Get all available subnets (not just default VPC which may be empty)
           SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
           echo "Available Subnets: $SUBNETS"
           
-          # Get VPC ID from first subnet
           VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
           echo "VPC ID: $VPC_ID"
           
-          # Verify we have subnets
           if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
             echo "ERROR: No subnets available in the AWS account!"
             exit 1
           fi
           
-          # Create security group
           SG_ID=$(aws ec2 create-security-group \
             --group-name servermonitoring-api-sg \
             --description "Security group for Server Monitoring API" \
@@ -165,7 +160,6 @@ jobs:
           
           echo "Security Group ID: $SG_ID"
           
-          # Allow inbound traffic on port 8080
           aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
@@ -190,7 +184,6 @@ jobs:
 
     - name: Wait for deployment
       run: |
-        echo "Waiting for service to stabilize..."
         aws ecs wait services-stable \
           --cluster ${{ env.ECS_CLUSTER }} \
           --services ${{ env.ECS_API_SERVICE }}
@@ -201,9 +194,5 @@ jobs:
         ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
         PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
         
-        echo "================================"
-        echo "DEPLOYMENT COMPLETE!"
-        echo "================================"
         echo "API URL: http://$PUBLIC_IP:8080/swagger"
         echo "Health: http://$PUBLIC_IP:8080/health"
-        echo "================================"

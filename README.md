@@ -1,61 +1,26 @@
-# 🎯 Server Monitoring System - Full Stack Enterprise Application
+# Server Monitoring System
 
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![React](https://img.shields.io/badge/React-18.2-61DAFB?logo=react)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/Tests-95_Passing-success)](tests/)
-[![Coverage](https://img.shields.io/badge/Coverage-65%25-brightgreen)](tests/)
 
-> **Senior Full Stack Developer Assessment** - Production-ready server monitoring system with .NET 9 backend, React 18 frontend, real-time SignalR updates, Clean Architecture, and SOLID principles.
+Full stack server monitoring application built with .NET 9 backend, React 18 frontend, SignalR real-time updates, Clean Architecture pattern.
 
----
+## Quick Start
 
-## 🎯 For Assessors
-
-**Visual Overview (Recommended):**  
-Open **[index.html](index.html)** in your browser for an interactive architecture presentation!
-
-**To test this application - ONE COMMAND:**
+Run the entire stack:
 
 ```powershell
 .\scripts\test-local.ps1
 ```
 
-Then access: http://localhost:3000 (login: admin / Admin123!)
-
-> **✨ That's the only script you need!** All other scripts in the repo are for development purposes only.
-
-**To understand the architecture:** See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-
-**Quick start guide:** See [docs/QUICK_START.md](docs/QUICK_START.md)
-
-**Additional documentation:** See [docs/](docs/) folder
-
----
-
-## 🎬 Quick Test - Single Command!
-
-**Just run one script:**
-
-```powershell
-.\scripts\test-local.ps1
-```
-
-**Then access:**
-- Frontend: http://localhost:3000 (login: `admin` / `Admin123!`)
+Access points:
+- Frontend: http://localhost:3000 (admin / Admin123!)
 - API: http://localhost:5000/swagger
 - Hangfire: http://localhost:5000/hangfire
 
-**That's it!** This single script automatically:
-- ✅ Validates environment configuration
-- ✅ Checks Docker is running
-- ✅ Builds all 4 services (SQL Server, Redis, API, Web)
-- ✅ Waits for health checks
-- ✅ Tests endpoints
-- ✅ Displays access URLs
-
-> **Note:** All other scripts in `scripts/` folder are for development purposes only. **Use `scripts/test-local.ps1` for assessment and production testing.**
+Architecture details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
