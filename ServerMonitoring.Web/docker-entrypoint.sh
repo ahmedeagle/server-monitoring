@@ -12,10 +12,18 @@ if [ -z "$API_URL" ]; then
     export API_URL="http://localhost:8080"
 fi
 
-envsubst '${API_URL}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+# Extract hostname:port from API_URL (remove http:// or https://)
+API_HOST=$(echo "$API_URL" | sed -e 's|^http://||' -e 's|^https://||' -e 's|/$||')
+echo "API_HOST extracted: $API_HOST"
+
+# Export for envsubst
+export API_HOST
+
+# Substitute both API_URL and API_HOST
+envsubst '${API_URL} ${API_HOST}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 echo "Nginx configuration:"
-grep -A 5 "location /api" /etc/nginx/nginx.conf || echo "Could not find /api location block"
+grep -A 5 "upstream\|location /api" /etc/nginx/nginx.conf || echo "Could not find configuration blocks"
 
 echo "====================================="
 echo "Starting nginx..."

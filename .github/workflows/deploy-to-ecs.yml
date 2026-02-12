@@ -609,6 +609,29 @@ jobs:
         echo "API_PUBLIC_IP=$API_PUBLIC_IP" >> $GITHUB_OUTPUT
         echo "✅ API Service IP: $API_PUBLIC_IP"
 
+    - name: Verify API health
+      run: |
+        API_IP="${{ steps.api-ip.outputs.API_PUBLIC_IP }}"
+        echo "Waiting for API to be healthy at http://$API_IP:8080/health..."
+        
+        # Wait up to 3 minutes for API to respond
+        for i in {1..36}; do
+          echo "Health check attempt $i..."
+          
+          if curl -f -s -m 5 "http://$API_IP:8080/health" > /dev/null 2>&1; then
+            echo "✅ API is healthy!"
+            curl -s "http://$API_IP:8080/health" || true
+            break
+          fi
+          
+          if [ $i -eq 36 ]; then
+            echo "⚠️  WARNING: API health check failed after 3 minutes"
+            echo "Proceeding anyway, but API may not be fully ready"
+          fi
+          
+          sleep 5
+        done
+
     - name: Create Web task definition with dynamic API URL
       run: |
         API_URL="http://${{ steps.api-ip.outputs.API_PUBLIC_IP }}:8080"
