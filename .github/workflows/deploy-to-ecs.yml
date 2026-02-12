@@ -477,12 +477,23 @@ jobs:
             --group-id $SG_ID \
             --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
         
-        # Add ingress rule
+        # Add ingress rule for API
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
             --port 8080 \
             --cidr 0.0.0.0/0
+        
+        # CRITICAL: Add ingress rule for HTTPS (443) for VPC endpoint access
+        echo "Adding HTTPS ingress rule for VPC endpoint connectivity..."
+        VPC_CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
+        aws ec2 authorize-security-group-ingress \
+            --group-id $SG_ID \
+            --protocol tcp \
+            --port 443 \
+            --cidr $VPC_CIDR 2>/dev/null || echo "HTTPS ingress may already exist"
+        
+        echo "VPC CIDR: $VPC_CIDR - Security group now allows HTTPS from VPC for endpoint access"
         
         # Verify egress rules
         echo "Verifying security group rules..."
