@@ -425,7 +425,7 @@ jobs:
             --group-id $SG_ID \
             --protocol tcp \
             --port 8080 \
-            --cidr 0.0.0.0/0
+            --cidr 0.0.0.0/0 2>/dev/null || echo "API ingress rule may already exist"
         
         # CRITICAL: Add ingress rule for HTTPS (443) for VPC endpoint access
         echo "Adding HTTPS ingress rule for VPC endpoint connectivity..."
