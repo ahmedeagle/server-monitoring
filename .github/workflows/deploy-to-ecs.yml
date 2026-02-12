@@ -120,6 +120,41 @@ jobs:
           echo "ecsTaskRole-ServerMonitoring already exists"
         fi
 
+    - name: Create/Update secrets in AWS Secrets Manager
+      run: |
+        # Create JWT secret if it doesn't exist
+        JWT_SECRET=$(openssl rand -base64 32)
+        aws secretsmanager create-secret \
+          --name servermonitoring/JWT_SECRET_KEY \
+          --secret-string "$JWT_SECRET" 2>/dev/null || \
+          echo "JWT secret already exists"
+        
+        # Create DB password
+        DB_PASSWORD=$(openssl rand -base64 16)
+        aws secretsmanager create-secret \
+          --name servermonitoring/DB_SA_PASSWORD \
+          --secret-string "$DB_PASSWORD" 2>/dev/null || \
+          echo "DB password already exists"
+        
+        # Create Redis password
+        REDIS_PASSWORD=$(openssl rand -base64 16)
+        aws secretsmanager create-secret \
+          --name servermonitoring/REDIS_PASSWORD \
+          --secret-string "$REDIS_PASSWORD" 2>/dev/null || \
+          echo "Redis password already exists"
+        
+        # Give execution role permission to read secrets
+        POLICY_EXISTS=$(aws iam list-attached-role-policies \
+          --role-name ecsTaskExecutionRole-ServerMonitoring \
+          --query "AttachedPolicies[?PolicyArn=='arn:aws:iam::aws:policy/SecretsManagerReadWrite'].PolicyArn" \
+          --output text)
+        
+        if [ -z "$POLICY_EXISTS" ]; then
+          aws iam attach-role-policy \
+            --role-name ecsTaskExecutionRole-ServerMonitoring \
+            --policy-arn arn:aws:iam::aws:policy/SecretsManagerReadWrite
+        fi
+
     - name: Create API task definition
       run: |
         cat > api-task-definition.json <<EOF
@@ -156,6 +191,20 @@ jobs:
                 {
                   "name": "UseInMemoryDatabase",
                   "value": "true"
+                },
+                {
+                  "name": "JWT_ISSUER",
+                  "value": "ServerMonitoringAPI"
+                },
+                {
+                  "name": "JWT_AUDIENCE",
+                  "value": "ServerMonitoringClient"
+                }
+              ],
+              "secrets": [
+                {
+                  "name": "JWT_SECRET_KEY",
+                  "valueFrom": "arn:aws:secretsmanager:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:secret:servermonitoring/JWT_SECRET_KEY"
                 }
               ],
               "logConfiguration": {
@@ -307,12 +356,22 @@ jobs:
         echo "Created SG: $SG_ID"
         sleep 2
         
-        # Security groups are created with default egress rule (0.0.0.0/0), so just add ingress
+        # EXPLICITLY add egress rule for ALL traffic (CRITICAL for ECR access)
+        echo "Adding egress rule for internet access..."
+        aws ec2 authorize-security-group-egress \
+            --group-id $SG_ID \
+            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
+        
+        # Add ingress rule
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
             --port 8080 \
             --cidr 0.0.0.0/0
+        
+        # Verify egress rules
+        echo "Verifying security group rules..."
+        aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].{Ingress:IpPermissions,Egress:IpPermissionsEgress}' --output json
           
         # Create service with JSON format
         aws ecs create-service \
@@ -346,22 +405,37 @@ jobs:
         SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
         
-        # Create/get security group for web
+        # Force delete old web security group if exists
+        EXISTING_SG_WEB=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-web-sg" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null || echo "None")
+        
+        if [ "$EXISTING_SG_WEB" != "None" ]; then
+          echo "Force deleting old web security group: $EXISTING_SG_WEB"
+          aws ec2 delete-security-group --group-id $EXISTING_SG_WEB 2>/dev/null || true
+          sleep 5
+        fi
+        
+        # Create fresh web security group
+        echo "Creating new web security group..."
         SG_ID_WEB=$(aws ec2 create-security-group \
           --group-name servermonitoring-web-sg \
           --description "Security group for Server Monitoring Web" \
           --vpc-id $VPC_ID \
           --query 'GroupId' \
-          --output text 2>/dev/null || \
-          aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
-            --query 'SecurityGroups[0].GroupId' \
-            --output text)
+          --output text)
         
         echo "Web SG: $SG_ID_WEB"
         sleep 2
         
-        # Add ingress rule (egress is 0.0.0.0/0 by default)
+        # EXPLICITLY add egress rule for ALL traffic (CRITICAL for ECR access)
+        echo "Adding egress rule for web..."
+        aws ec2 authorize-security-group-egress \
+            --group-id $SG_ID_WEB \
+            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
+        
+        # Add ingress rule
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID_WEB \
             --protocol tcp \
