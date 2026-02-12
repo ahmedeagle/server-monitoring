@@ -38,13 +38,13 @@ describe('Dashboard Component', () => {
     vi.mocked(serverService.getMetrics).mockResolvedValue([]);
   });
 
-  it('should render dashboard component', () => {
+  it('should render dashboard component', async () => {
     render(
       <BrowserRouter>
         <DashboardPage />
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/dashboard/i)).toBeInTheDocument();
+    expect(await screen.findByText(/dashboard/i)).toBeInTheDocument();
   });
 });
