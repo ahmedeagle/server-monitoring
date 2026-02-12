@@ -11,4 +11,4 @@ fi
 
 # Switch to non-root user and execute the application
 echo "Starting application as appuser..."
-exec su-exec appuser dotnet ServerMonitoring.API.dll
+exec gosu appuser dotnet ServerMonitoring.API.dll
