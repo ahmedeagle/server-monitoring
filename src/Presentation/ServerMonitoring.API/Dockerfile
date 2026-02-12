@@ -1,7 +1,7 @@
 # ================================
 # Build Stage
 # ================================
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /src
 
@@ -17,7 +17,7 @@ RUN dotnet publish "src/Presentation/ServerMonitoring.API/ServerMonitoring.API.c
 # ================================
 # Runtime Stage
 # ================================
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS publish
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS publish
 
 WORKDIR /app
 

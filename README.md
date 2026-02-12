@@ -1,11 +1,11 @@
 # Server Monitoring System
 
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![React](https://img.shields.io/badge/React-18.2-61DAFB?logo=react)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 
-Full stack server monitoring application built with .NET 9 backend, React 18 frontend, SignalR real-time updates, Clean Architecture pattern.
+Full stack server monitoring application built with .NET 10 backend, React 18 frontend, SignalR real-time updates, Clean Architecture pattern.
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ Architecture details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## ✨ Features Implemented
 
-### Backend (.NET 9) - 95% Complete ✅
+### Backend (.NET 10) - 95% Complete ✅
 
 #### Core Architecture
 - ✅ **Clean Architecture** (Domain → Application → Infrastructure → Presentation)
@@ -175,7 +175,7 @@ Architecture details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 ## 🛠️ Technology Stack
 
 ### Backend
-- **.NET 9.0** - Latest LTS framework
+- **.NET 10.0** - Latest framework
 - **ASP.NET Core** - Web API framework
 - **Entity Framework Core** - ORM
 - **SQL Server** - Primary database
@@ -989,7 +989,7 @@ This project is licensed under the MIT License.
 ## 👨‍💻 Author
 
 **Senior Full Stack Developer Assessment**
-- .NET 9 Backend with Clean Architecture
+- .NET 10 Backend with Clean Architecture
 - React 18 TypeScript Frontend
 - SignalR Real-time Communication
 - Hangfire Background Jobs
