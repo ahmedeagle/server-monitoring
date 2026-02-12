@@ -18,7 +18,7 @@ public class GetServerByIdQueryHandler : IRequestHandler<GetServerByIdQuery, Res
     public async Task<Result<ServerDto>> Handle(GetServerByIdQuery request, CancellationToken cancellationToken)
     {
         var server = await _context.Servers
-            .FirstOrDefaultAsync(s => s.Id == request.Id && s.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(s => s.Id == request.Id && !s.IsDeleted, cancellationToken);
 
         if (server == null)
         {
