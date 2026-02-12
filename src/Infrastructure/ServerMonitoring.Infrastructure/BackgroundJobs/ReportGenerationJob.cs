@@ -37,10 +37,8 @@ public class ReportGenerationJob
             // Update report status to Processing
             await UpdateReportStatusAsync(reportId, "Processing");
 
-            // Simulate report generation (in production, query metrics from DB)
-            await Task.Delay(TimeSpan.FromSeconds(5)); // Simulate processing time
+            await Task.Delay(TimeSpan.FromSeconds(5));
 
-            // Generate report data
             var reportData = await GenerateReportDataAsync(serverId, startDate, endDate);
 
             // Save report to storage (file system, blob storage, etc.)

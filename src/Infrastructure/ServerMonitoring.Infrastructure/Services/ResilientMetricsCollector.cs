@@ -54,7 +54,6 @@ public class ResilientMetricsCollector : IMetricsCollector
 
     private async Task<Metric> CollectMetricsInternalAsync(Server server, CancellationToken cancellationToken)
     {
-        // Simulate async operation (in real scenario, this might call remote APIs)
         await Task.Delay(50, cancellationToken);
 
         var metric = new Metric
