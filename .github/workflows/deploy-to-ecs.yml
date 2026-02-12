@@ -381,7 +381,23 @@ jobs:
             --service-name com.amazonaws.${{ env.AWS_REGION }}.s3 \
             --route-table-ids $ROUTE_TABLE 2>/dev/null || echo "S3 endpoint may already exist"
           
-          echo "✅ VPC endpoints created - tasks will use private AWS network"
+          # Create VPC endpoint for Secrets Manager (CRITICAL - tasks pull secrets at startup)
+          aws ec2 create-vpc-endpoint \
+            --vpc-id $VPC_ID \
+            --vpc-endpoint-type Interface \
+            --service-name com.amazonaws.${{ env.AWS_REGION }}.secretsmanager \
+            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-group-ids $SG_ID 2>/dev/null || echo "Secrets Manager endpoint may already exist"
+          
+          # Create VPC endpoint for CloudWatch Logs
+          aws ec2 create-vpc-endpoint \
+            --vpc-id $VPC_ID \
+            --vpc-endpoint-type Interface \
+            --service-name com.amazonaws.${{ env.AWS_REGION }}.logs \
+            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-group-ids $SG_ID 2>/dev/null || echo "CloudWatch Logs endpoint may already exist"
+          
+          echo "✅ VPC endpoints created (ECR, S3, Secrets Manager, CloudWatch) - tasks will use private AWS network"
         else
           echo "✅ Internet gateway found: $IGW_ROUTE"
         fi
