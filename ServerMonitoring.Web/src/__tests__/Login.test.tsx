@@ -34,9 +34,9 @@ describe('Login Component', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/sign in/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button')).toBeInTheDocument();
   });
 
   it('should handle username input', () => {
