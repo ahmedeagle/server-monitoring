@@ -138,7 +138,11 @@ jobs:
           echo "Creating new service..."
           # Get default VPC and subnets
           VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query 'Vpcs[0].VpcId' --output text)
-          SUBNET_IDS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')
+          echo "VPC ID: $VPC_ID"
+          
+          # Get subnets - use JSON array format
+          SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[*].SubnetId' --output json)
+          echo "Subnets: $SUBNETS"
           
           # Create security group
           SG_ID=$(aws ec2 create-security-group \
@@ -152,6 +156,8 @@ jobs:
               --query 'SecurityGroups[0].GroupId' \
               --output text)
           
+          echo "Security Group ID: $SG_ID"
+          
           # Allow inbound traffic on port 8080
           aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
@@ -159,14 +165,20 @@ jobs:
             --port 8080 \
             --cidr 0.0.0.0/0 2>/dev/null || true
           
-          # Create service
+          # Create service with JSON format
           aws ecs create-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service-name ${{ env.ECS_API_SERVICE }} \
             --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
             --desired-count 1 \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SG_ID],assignPublicIp=ENABLED}"
+            --network-configuration "{
+              \"awsvpcConfiguration\": {
+                \"subnets\": $SUBNETS,
+                \"securityGroups\": [\"$SG_ID\"],
+                \"assignPublicIp\": \"ENABLED\"
+              }
+            }"
         fi
 
     - name: Wait for deployment
