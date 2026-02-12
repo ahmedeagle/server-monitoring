@@ -13,10 +13,14 @@ public class PasswordHashingTests
     public PasswordHashingTests()
     {
         var mockConfig = new Mock<IConfiguration>();
-        mockConfig.Setup(x => x["Jwt:SecretKey"]).Returns("TestSecretKeyForJWT1234567890123456");
-        mockConfig.Setup(x => x["Jwt:Issuer"]).Returns("TestIssuer");
-        mockConfig.Setup(x => x["Jwt:Audience"]).Returns("TestAudience");
-        mockConfig.Setup(x => x["Jwt:ExpiryInMinutes"]).Returns("60");
+        var mockJwtSection = new Mock<IConfigurationSection>();
+        
+        mockJwtSection.Setup(x => x["SecretKey"]).Returns("TestSecretKeyForJWT1234567890123456");
+        mockJwtSection.Setup(x => x["Issuer"]).Returns("TestIssuer");
+        mockJwtSection.Setup(x => x["Audience"]).Returns("TestAudience");
+        mockJwtSection.Setup(x => x["AccessTokenExpirationMinutes"]).Returns("60");
+        
+        mockConfig.Setup(x => x.GetSection("JwtSettings")).Returns(mockJwtSection.Object);
         
         _authService = new AuthService(mockConfig.Object);
     }
