@@ -43,6 +43,10 @@ RUN apk upgrade --no-cache \
     ca-certificates \
     tzdata
 
+# Create non-root user (security best practice)
+RUN addgroup -g 1001 -S appuser \
+    && adduser -u 1001 -S appuser -G appuser
+
 # Copy custom nginx configuration as template
 COPY nginx.conf /etc/nginx/nginx.conf.template
 
@@ -52,16 +56,6 @@ RUN chmod +x /docker-entrypoint.sh
 
 # Copy built app from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# Set default API URL (can be overridden at runtime)
-ENV API_URL=http://localhost:8080
-
-# Use custom entrypoint
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
-# Create non-root user (security best practice)
-RUN addgroup -g 1001 -S appuser \
-    && adduser -u 1001 -S appuser -G appuser
 
 # Set ownership and permissions
 RUN chown -R appuser:appuser /usr/share/nginx/html \
@@ -74,6 +68,9 @@ RUN chown -R appuser:appuser /usr/share/nginx/html \
 # Remove default nginx files
 RUN rm -f /etc/nginx/conf.d/default.conf
 
+# Set default API URL (can be overridden at runtime)
+ENV API_URL=http://localhost:8080
+
 # Note: nginx will run as appuser (configured in nginx.conf)
 # but the entrypoint script needs root to substitute config
 
@@ -83,3 +80,6 @@ EXPOSE 80
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:80 || exit 1
+
+# Use custom entrypoint
+ENTRYPOINT ["/docker-entrypoint.sh"]
