@@ -865,15 +865,97 @@
                 </div>
             </div>
 
+            <!-- AWS ECS & GitHub Actions Deployment Section -->
+            <div class="section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 60px 40px; color: white;">
+                <h2 style="color: white; text-align: center; font-size: 2.5em; margin-bottom: 20px;">🚀 Production Deployment - AWS ECS & GitHub Actions</h2>
+                <p style="text-align: center; font-size: 1.2em; margin-bottom: 40px; opacity: 0.9;">Fully automated CI/CD pipeline with ECS Fargate orchestration</p>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; max-width: 1400px; margin: 0 auto;">
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">☁️</div>
+                        <h3 style="color: white; margin-bottom: 10px;">AWS ECS Fargate</h3>
+                        <p style="opacity: 0.9;">✅ API + Web services deployed</p>
+                        <p style="opacity: 0.9;">✅ Task definitions with health checks</p>
+                        <p style="opacity: 0.9;">✅ Auto-scaling configuration</p>
+                        <p style="opacity: 0.9;">✅ Public IP assignment</p>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">🔄</div>
+                        <h3 style="color: white; margin-bottom: 10px;">GitHub Actions CI/CD</h3>
+                        <p style="opacity: 0.9;">✅ Automated Docker builds</p>
+                        <p style="opacity: 0.9;">✅ ECR push (commit SHA + latest)</p>
+                        <p style="opacity: 0.9;">✅ Task registration</p>
+                        <p style="opacity: 0.9;">✅ Zero-downtime deployments</p>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">🔒</div>
+                        <h3 style="color: white; margin-bottom: 10px;">AWS Secrets Manager</h3>
+                        <p style="opacity: 0.9;">✅ Auto-generated JWT secrets</p>
+                        <p style="opacity: 0.9;">✅ DB password management</p>
+                        <p style="opacity: 0.9;">✅ Redis credentials</p>
+                        <p style="opacity: 0.9;">✅ Runtime injection to containers</p>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">🛡️</div>
+                        <h3 style="color: white; margin-bottom: 10px;">Infrastructure Auto-Provisioning</h3>
+                        <p style="opacity: 0.9;">✅ IAM roles created automatically</p>
+                        <p style="opacity: 0.9;">✅ Security groups configured</p>
+                        <p style="opacity: 0.9;">✅ VPC endpoints for ECR</p>
+                        <p style="opacity: 0.9;">✅ CloudWatch log groups</p>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">📦</div>
+                        <h3 style="color: white; margin-bottom: 10px;">Container Registry</h3>
+                        <p style="opacity: 0.9;">✅ ECR repositories auto-created</p>
+                        <p style="opacity: 0.9;">✅ Multi-stage Docker builds</p>
+                        <p style="opacity: 0.9;">✅ Layer caching optimization</p>
+                        <p style="opacity: 0.9;">✅ Non-root user (UID 1001)</p>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                        <div style="font-size: 3em; margin-bottom: 15px;">⚡</div>
+                        <h3 style="color: white; margin-bottom: 10px;">Performance</h3>
+                        <p style="opacity: 0.9;">✅ 3-minute deployments</p>
+                        <p style="opacity: 0.9;">✅ Parallel Docker builds</p>
+                        <p style="opacity: 0.9;">✅ No blocking operations</p>
+                        <p style="opacity: 0.9;">✅ Smart ENI management</p>
+                    </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; margin-top: 40px; border: 2px solid rgba(255,255,255,0.4); text-align: center;">
+                    <h3 style="color: white; margin-bottom: 15px; font-size: 1.8em;">📊 Deployment Workflow</h3>
+                    <p style="font-size: 1.1em; opacity: 0.95; line-height: 1.8;">
+                        Push to GitHub → Build Docker Images → Push to ECR → Create IAM Roles → 
+                        Configure Secrets Manager → Register Task Definitions → Deploy to ECS → 
+                        Configure Security Groups → Create VPC Endpoints → Output Public URLs
+                    </p>
+                    <div style="margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                        <p style="font-size: 1.3em; font-weight: bold; margin-bottom: 10px;">🌐 Live Deployment URLs</p>
+                        <p style="opacity: 0.9;">Web UI: http://&lt;PUBLIC_IP&gt;</p>
+                        <p style="opacity: 0.9;">API: http://&lt;PUBLIC_IP&gt;:8080/swagger</p>
+                        <p style="opacity: 0.9;">Health: http://&lt;PUBLIC_IP&gt;:8080/health</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Bonus Features -->
             <div class="bonus-section">
-                <h2>🏆 Bonus FeaturBest Practices</h3>
+                <h2>🏆 Bonus Features & Best Practices</h2>
+                <div class="bonus-grid">
+                    <div class="bonus-item">
+                        <div class="icon">🐳</div>
+                        <h3>Docker Best Practices</h3>
                         <p>Multi-stage builds, layer caching, non-root users, security hardening, health checks.</p>
                     </div>
                     <div class="bonus-item">
                         <div class="icon">🔧</div>
                         <h3>Environment Management</h3>
-                        <p>Secure config with validation, secret generation, dev/prod templates, no hardcoded secrets
+                        <p>Secure config with validation, secret generation, dev/prod templates, no hardcoded secrets.</p>
+                    </div>
                     <div class="bonus-item">
                         <div class="icon">☁️</div>
                         <h3>AWS ECS Fargate</h3>
