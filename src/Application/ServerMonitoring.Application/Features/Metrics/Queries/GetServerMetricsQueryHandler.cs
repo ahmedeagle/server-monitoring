@@ -25,13 +25,13 @@ public class GetServerMetricsQueryHandler : IRequestHandler<GetServerMetricsQuer
             {
                 Id = m.Id,
                 ServerId = m.ServerId,
-                CpuUsage = m.CPUUsage,
+                CpuUsage = m.CpuUsage,
                 MemoryUsage = m.MemoryUsage,
                 DiskUsage = m.DiskUsage,
                 NetworkInbound = m.NetworkInbound,
                 NetworkOutbound = m.NetworkOutbound,
                 ResponseTime = m.ResponseTime,
-                Timestamp = m.Timestamp
+                RecordedAt = m.Timestamp
             })
             .ToListAsync(cancellationToken);
 

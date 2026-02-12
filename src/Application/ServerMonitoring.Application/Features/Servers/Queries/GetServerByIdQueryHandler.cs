@@ -33,8 +33,7 @@ public class GetServerByIdQueryHandler : IRequestHandler<GetServerByIdQuery, Res
             IPAddress = server.IPAddress,
             Port = server.Port,
             OperatingSystem = server.OperatingSystem,
-            Status = server.Status,
-            IsActive = server.IsActive,
+            Status = server.Status.ToString(),
             CreatedAt = server.CreatedAt,
             UpdatedAt = server.UpdatedAt
         };

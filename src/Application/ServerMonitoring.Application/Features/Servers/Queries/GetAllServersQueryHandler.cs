@@ -18,7 +18,7 @@ public class GetAllServersQueryHandler : IRequestHandler<GetAllServersQuery, Res
     public async Task<Result<List<ServerDto>>> Handle(GetAllServersQuery request, CancellationToken cancellationToken)
     {
         var servers = await _context.Servers
-            .Where(s => s.IsActive)
+            .Where(s => !s.IsDeleted)
             .OrderBy(s => s.Name)
             .Select(s => new ServerDto
             {
@@ -28,8 +28,7 @@ public class GetAllServersQueryHandler : IRequestHandler<GetAllServersQuery, Res
                 IPAddress = s.IPAddress,
                 Port = s.Port,
                 OperatingSystem = s.OperatingSystem,
-                Status = s.Status,
-                IsActive = s.IsActive,
+                Status = s.Status.ToString(),
                 CreatedAt = s.CreatedAt,
                 UpdatedAt = s.UpdatedAt
             })

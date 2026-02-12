@@ -25,8 +25,7 @@ public class CreateServerCommandHandler : IRequestHandler<CreateServerCommand, R
             IPAddress = request.IPAddress,
             Port = request.Port,
             OperatingSystem = request.OperatingSystem,
-            Status = "Offline",
-            IsActive = true,
+            Status = Domain.Enums.ServerStatus.Offline,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "System" // TODO: Get from auth context
         };
@@ -42,8 +41,7 @@ public class CreateServerCommandHandler : IRequestHandler<CreateServerCommand, R
             IPAddress = server.IPAddress,
             Port = server.Port,
             OperatingSystem = server.OperatingSystem,
-            Status = server.Status,
-            IsActive = server.IsActive,
+            Status = server.Status.ToString(),
             CreatedAt = server.CreatedAt,
             UpdatedAt = server.UpdatedAt
         };
