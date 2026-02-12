@@ -223,14 +223,30 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var authService = scope.ServiceProvider.GetRequiredService<ServerMonitoring.Application.Interfaces.IAuthService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     
-    if (useInMemoryDatabase)
+    try
     {
-        await context.Database.EnsureCreatedAsync();
+        if (useInMemoryDatabase)
+        {
+            await context.Database.EnsureCreatedAsync();
+            logger.LogInformation("In-memory database created");
+        }
+        else
+        {
+            // For SQLite, ensure database and schema are created
+            await context.Database.EnsureCreatedAsync();
+            logger.LogInformation("SQLite database created/verified");
+        }
+        
+        await ServerMonitoring.Infrastructure.Seeders.DatabaseSeeder.SeedAsync(context, authService);
+        logger.LogInformation("Database seeded successfully");
     }
-    
-    await ServerMonitoring.Infrastructure.Seeders.DatabaseSeeder.SeedAsync(context, authService);
-    Log.Information("Database seeded successfully");
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to initialize database");
+        throw;
+    }
 }
 
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
