@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import ServerList from '../pages/ServerList';
+import ServersPage from '../pages/ServersPage';
 import { serverService } from '../services/serverService';
 
 vi.mock('../services/serverService', () => ({
@@ -102,7 +102,7 @@ describe('ServerList Component', () => {
   });
 
   it('should handle server deletion', async () => {
-    vi.mocked(serverService.deleteServer).mockResolvedValue();
+    vi.mocked(serverService.delete).mockResolvedValue();
 
     render(
       <BrowserRouter>

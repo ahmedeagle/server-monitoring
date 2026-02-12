@@ -54,12 +54,12 @@ public class ServersController : ControllerBase
             // Add Link headers for HATEOAS
             if (result.Data!.HasNextPage && !string.IsNullOrEmpty(result.Data.NextCursor))
             {
-                Response.Headers.Add("Link", $"</api/v2/servers/cursor?cursor={result.Data.NextCursor}&pageSize={result.Data.PageSize}>; rel=\"next\"");
+                Response.Headers.Append("Link", $"</api/v2/servers/cursor?cursor={result.Data.NextCursor}&pageSize={result.Data.PageSize}>; rel=\"next\"");
             }
 
             if (result.Data.HasPreviousPage && !string.IsNullOrEmpty(result.Data.PreviousCursor))
             {
-                Response.Headers.Add("Link", $"</api/v2/servers/cursor?cursor={result.Data.PreviousCursor}&pageSize={result.Data.PageSize}&direction=previous>; rel=\"prev\"");
+                Response.Headers.Append("Link", $"</api/v2/servers/cursor?cursor={result.Data.PreviousCursor}&pageSize={result.Data.PageSize}&direction=previous>; rel=\"prev\"");
             }
 
             return Ok(result.Data);
@@ -90,7 +90,7 @@ public class ServersController : ControllerBase
 
         // Generate ETag based on UpdatedAt timestamp
         var etag = GenerateETag(result.Data!);
-        Response.Headers.Add("ETag", etag);
+        Response.Headers.Append("ETag", etag);
 
         // Check If-None-Match header
         if (Request.Headers.TryGetValue("If-None-Match", out var incomingEtag))
@@ -102,7 +102,7 @@ public class ServersController : ControllerBase
         }
 
         // Add Cache-Control header
-        Response.Headers.Add("Cache-Control", "private, max-age=60");
+        Response.Headers.Append("Cache-Control", "private, max-age=60");
 
         return Ok(result.Data);
     }
@@ -128,7 +128,7 @@ public class ServersController : ControllerBase
         if (result.IsSuccess)
         {
             var etag = GenerateETag(result.Data!);
-            Response.Headers.Add("ETag", etag);
+            Response.Headers.Append("ETag", etag);
 
             return CreatedAtAction(
                 nameof(GetServer),

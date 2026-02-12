@@ -22,7 +22,7 @@ public class CorrelationIdMiddleware
         string correlationId = GetOrGenerateCorrelationId(context);
 
         // Add to response headers for client tracking
-        context.Response.Headers.Add(CorrelationIdHeaderName, correlationId);
+        context.Response.Headers.Append(CorrelationIdHeaderName, correlationId);
 
         // Add to HttpContext items for access in controllers/services
         context.Items[CorrelationIdHeaderName] = correlationId;
