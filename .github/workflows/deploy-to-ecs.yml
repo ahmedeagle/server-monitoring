@@ -8,9 +8,12 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_API_REPOSITORY: servermonitoring-api
+  ECR_WEB_REPOSITORY: servermonitoring-web
   ECS_CLUSTER: servermonitoring-cluster
   ECS_API_SERVICE: servermonitoring-api-service
+  ECS_WEB_SERVICE: servermonitoring-web-service
   API_CONTAINER_NAME: api
+  WEB_CONTAINER_NAME: web
 
 jobs:
   deploy:
@@ -32,6 +35,16 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
+    - name: Create ECR repositories if they don't exist
+      run: |
+        # Create API repository
+        aws ecr describe-repositories --repository-names ${{ env.ECR_API_REPOSITORY }} 2>/dev/null || \
+          aws ecr create-repository --repository-name ${{ env.ECR_API_REPOSITORY }}
+        
+        # Create Web repository
+        aws ecr describe-repositories --repository-names ${{ env.ECR_WEB_REPOSITORY }} 2>/dev/null || \
+          aws ecr create-repository --repository-name ${{ env.ECR_WEB_REPOSITORY }}
+
     - name: Build, tag, and push API image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -42,6 +55,17 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
         echo "API_IMAGE=$ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+    - name: Build, tag, and push Web image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG -f ServerMonitoring.Web/Dockerfile .
+        docker tag $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
+        echo "WEB_IMAGE=$ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
     - name: Create IAM roles for ECS
       run: |
@@ -155,10 +179,67 @@ jobs:
         }
         EOF
 
+    - name: Create Web task definition
+      run: |
+        cat > web-task-definition.json <<EOF
+        {
+          "family": "servermonitoring-web",
+          "networkMode": "awsvpc",
+          "requiresCompatibilities": ["FARGATE"],
+          "cpu": "256",
+          "memory": "512",
+          "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole-ServerMonitoring",
+          "taskRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskRole-ServerMonitoring",
+          "containerDefinitions": [
+            {
+              "name": "${{ env.WEB_CONTAINER_NAME }}",
+              "image": "${{ env.WEB_IMAGE }}",
+              "cpu": 256,
+              "memory": 512,
+              "essential": true,
+              "portMappings": [
+                {
+                  "containerPort": 80,
+                  "protocol": "tcp"
+                }
+              ],
+              "environment": [
+                {
+                  "name": "VITE_API_URL",
+                  "value": "http://localhost:8080"
+                }
+              ],
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-create-group": "true",
+                  "awslogs-group": "/ecs/servermonitoring-web",
+                  "awslogs-region": "${{ env.AWS_REGION }}",
+                  "awslogs-stream-prefix": "ecs"
+                }
+              },
+              "healthCheck": {
+                "command": ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+              }
+            }
+          ]
+        }
+        EOF
+
     - name: Register API task definition
       id: api-task-def
       run: |
         TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://api-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
+        echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+    - name: Register Web task definition
+      id: web-task-def
+      run: |
+        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://web-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
     - name: Deploy to ECS
@@ -233,18 +314,31 @@ jobs:
             --output text)
         
         echo "SG: $SG_ID"
+        
+        # Remove default egress rule and add new one (fix ECR connectivity)
+        DEFAULT_EGRESS=$(aws ec2 describe-security-group-rules \
+          --filters "Name=group-id,Values=$SG_ID" "Name=is-egress,Values=true" \
+          --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
+          --output text 2>/dev/null || echo "None")
+        
+        if [ "$DEFAULT_EGRESS" != "None" ] && [ "$DEFAULT_EGRESS" != "" ]; then
+          echo "Removing default egress rule..."
+          aws ec2 revoke-security-group-egress \
+            --group-id $SG_ID \
+            --security-group-rule-ids $DEFAULT_EGRESS 2>/dev/null || true
+        fi
+        
+        # Allow all outbound traffic (needed for ECR and internet access)
+        aws ec2 authorize-security-group-egress \
+            --group-id $SG_ID \
+            --protocol -1 \
+            --cidr 0.0.0.0/0 2>/dev/null || true
           
-        # Allow inbound traffic
+        # Allow inbound traffic on port 8080 (API)
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
             --port 8080 \
-            --cidr 0.0.0.0/0 2>/dev/null || true
-        
-        # Allow outbound traffic (needed for ECR image pull)
-        aws ec2 authorize-security-group-egress \
-            --group-id $SG_ID \
-            --protocol -1 \
             --cidr 0.0.0.0/0 2>/dev/null || true
           
         # Create service with JSON format
@@ -350,20 +444,109 @@ jobs:
           exit 1
         }
 
-    - name: Get service URL
+    - name: Deploy Web to ECS
       run: |
-        TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_API_SERVICE }} --query 'taskArns[0]' --output text)
+        # Get subnets and VPC (already created from API deployment)
+        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
         
-        if [ "$TASK_ARN" = "None" ] || [ -z "$TASK_ARN" ]; then
-          echo "No tasks running!"
-          exit 1
+        # Create/get security group for web
+        SG_ID_WEB=$(aws ec2 create-security-group \
+          --group-name servermonitoring-web-sg \
+          --description "Security group for Server Monitoring Web" \
+          --vpc-id $VPC_ID \
+          --query 'GroupId' \
+          --output text 2>/dev/null || \
+          aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
+        
+        echo "Web SG: $SG_ID_WEB"
+        
+        # Remove default egress and add proper rules
+        DEFAULT_EGRESS_WEB=$(aws ec2 describe-security-group-rules \
+          --filters "Name=group-id,Values=$SG_ID_WEB" "Name=is-egress,Values=true" \
+          --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
+          --output text 2>/dev/null || echo "None")
+        
+        if [ "$DEFAULT_EGRESS_WEB" != "None" ] && [ "$DEFAULT_EGRESS_WEB" != "" ]; then
+          aws ec2 revoke-security-group-egress \
+            --group-id $SG_ID_WEB \
+            --security-group-rule-ids $DEFAULT_EGRESS_WEB 2>/dev/null || true
         fi
         
-        ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
-        PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+        # Allow outbound
+        aws ec2 authorize-security-group-egress \
+            --group-id $SG_ID_WEB \
+            --protocol -1 \
+            --cidr 0.0.0.0/0 2>/dev/null || true
+        
+        # Allow inbound on port 80
+        aws ec2 authorize-security-group-ingress \
+            --group-id $SG_ID_WEB \
+            --protocol tcp \
+            --port 80 \
+            --cidr 0.0.0.0/0 2>/dev/null || true
+        
+        # Check if web service exists
+        WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+        
+        if [ "$WEB_SERVICE_EXISTS" = "ACTIVE" ] || [ "$WEB_SERVICE_EXISTS" = "DRAINING" ]; then
+          echo "Web service exists, deleting..."
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_WEB_SERVICE }} --desired-count 0 2>/dev/null || true
+          aws ecs delete-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_WEB_SERVICE }} 2>/dev/null || true
+          
+          for i in {1..30}; do
+            WEB_STATUS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+            if [ "$WEB_STATUS" = "INACTIVE" ] || [ "$WEB_STATUS" = "MISSING" ]; then
+              break
+            fi
+            sleep 10
+          done
+        fi
+        
+        # Create web service
+        echo "Creating web service..."
+        aws ecs create-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_WEB_SERVICE }} \
+            --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
+            --desired-count 1 \
+            --launch-type FARGATE \
+            --network-configuration "{
+              \"awsvpcConfiguration\": {
+                \"subnets\": $SUBNETS,
+                \"securityGroups\": [\"$SG_ID_WEB\"],
+                \"assignPublicIp\": \"ENABLED\"
+              }
+            }"
+
+    - name: Wait for Web deployment
+      run: |
+        echo "Waiting for web service to stabilize (max 10 minutes)..."
+        timeout 600 aws ecs wait services-stable \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --services ${{ env.ECS_WEB_SERVICE }} || echo "Web deployment may need more time"
+
+    - name: Get service URLs
+      run: |
+        # Get API URL
+        API_TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_API_SERVICE }} --query 'taskArns[0]' --output text)
+        API_ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $API_TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
+        API_PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $API_ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+        
+        # Get Web URL
+        WEB_TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_WEB_SERVICE }} --query 'taskArns[0]' --output text)
+        WEB_ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $WEB_TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
+        WEB_PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $WEB_ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
         
         echo "========================================="
-        echo "API: http://$PUBLIC_IP:8080/swagger"
-        echo "Health: http://$PUBLIC_IP:8080/health"
+        echo "🌐 WEB UI: http://$WEB_PUBLIC_IP"
+        echo "🔧 API: http://$API_PUBLIC_IP:8080/swagger"
+        echo "❤️  Health: http://$API_PUBLIC_IP:8080/health"
+        echo "========================================="
+        echo ""
+        echo "Access your application at: http://$WEB_PUBLIC_IP"
         echo "========================================="
 
