@@ -8,6 +8,10 @@ LABEL maintainer="ServerMonitoring Team"
 LABEL description="Server Monitoring Web UI - React + Vite"
 LABEL version="1.0"
 
+# Accept API URL as build argument (CRITICAL for production)
+ARG VITE_API_URL=http://localhost:8080
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 
 # Install dependencies for node-gyp if needed
@@ -23,8 +27,9 @@ RUN npm ci --silent --no-audit --no-fund \
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build \
+# Build the application with the provided API URL
+RUN echo "Building with VITE_API_URL=$VITE_API_URL" \
+    && npm run build \
     && rm -rf node_modules
 
 # ================================
