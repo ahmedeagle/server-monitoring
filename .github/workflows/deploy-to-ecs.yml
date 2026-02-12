@@ -136,13 +136,20 @@ jobs:
             --force-new-deployment
         else
           echo "Creating new service..."
-          # Get default VPC and subnets
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query 'Vpcs[0].VpcId' --output text)
+          
+          # Get all available subnets (not just default VPC which may be empty)
+          SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+          echo "Available Subnets: $SUBNETS"
+          
+          # Get VPC ID from first subnet
+          VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
           echo "VPC ID: $VPC_ID"
           
-          # Get subnets - use JSON array format
-          SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[*].SubnetId' --output json)
-          echo "Subnets: $SUBNETS"
+          # Verify we have subnets
+          if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
+            echo "ERROR: No subnets available in the AWS account!"
+            exit 1
+          fi
           
           # Create security group
           SG_ID=$(aws ec2 create-security-group \
