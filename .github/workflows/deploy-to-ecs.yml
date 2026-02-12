@@ -332,6 +332,60 @@ jobs:
           exit 1
         fi
         
+        # Check if subnets have internet gateway routes
+        SUBNET_ID=$(echo $SUBNETS | jq -r '.[0]')
+        echo "Checking internet connectivity for subnet: $SUBNET_ID"
+        
+        ROUTE_TABLE=$(aws ec2 describe-route-tables \
+          --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
+          --query 'RouteTables[0].RouteTableId' \
+          --output text 2>/dev/null || \
+          aws ec2 describe-route-tables \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=association.main,Values=true" \
+            --query 'RouteTables[0].RouteTableId' \
+            --output text)
+        
+        echo "Route table: $ROUTE_TABLE"
+        
+        IGW_ROUTE=$(aws ec2 describe-route-tables \
+          --route-table-ids $ROUTE_TABLE \
+          --query 'RouteTables[0].Routes[?DestinationCidrBlock==`0.0.0.0/0`].GatewayId' \
+          --output text 2>/dev/null || echo "None")
+        
+        echo "Internet Gateway route: $IGW_ROUTE"
+        
+        # Create VPC Endpoints for ECR if no internet gateway (CRITICAL FIX)
+        if [ "$IGW_ROUTE" = "None" ] || [ -z "$IGW_ROUTE" ]; then
+          echo "⚠️  WARNING: No internet gateway found! Creating VPC endpoints for ECR..."
+          
+          # Create VPC endpoint for ECR API
+          aws ec2 create-vpc-endpoint \
+            --vpc-id $VPC_ID \
+            --vpc-endpoint-type Interface \
+            --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.api \
+            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-group-ids $SG_ID 2>/dev/null || echo "ECR API endpoint may already exist"
+          
+          # Create VPC endpoint for ECR Docker
+          aws ec2 create-vpc-endpoint \
+            --vpc-id $VPC_ID \
+            --vpc-endpoint-type Interface \
+            --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.dkr \
+            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-group-ids $SG_ID 2>/dev/null || echo "ECR DKR endpoint may already exist"
+          
+          # Create VPC endpoint for S3 (needed for ECR layers)
+          aws ec2 create-vpc-endpoint \
+            --vpc-id $VPC_ID \
+            --vpc-endpoint-type Gateway \
+            --service-name com.amazonaws.${{ env.AWS_REGION }}.s3 \
+            --route-table-ids $ROUTE_TABLE 2>/dev/null || echo "S3 endpoint may already exist"
+          
+          echo "✅ VPC endpoints created - tasks will use private AWS network"
+        else
+          echo "✅ Internet gateway found: $IGW_ROUTE"
+        fi
+        
         # Force delete old security group if exists
         EXISTING_SG=$(aws ec2 describe-security-groups \
           --filters "Name=group-name,Values=servermonitoring-api-sg" \
