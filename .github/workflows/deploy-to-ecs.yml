@@ -339,19 +339,43 @@ jobs:
           --output text 2>/dev/null || echo "None")
         
         if [ "$EXISTING_SG" != "None" ]; then
-          echo "Force deleting old security group: $EXISTING_SG"
-          aws ec2 delete-security-group --group-id $EXISTING_SG 2>/dev/null || true
-          sleep 5
+          echo "Found existing security group: $EXISTING_SG"
+          echo "Waiting for network interfaces to detach..."
+          
+          # Wait up to 60 seconds for ENIs to detach
+          for i in {1..12}; do
+            ENI_COUNT=$(aws ec2 describe-network-interfaces \
+              --filters "Name=group-id,Values=$EXISTING_SG" \
+              --query 'length(NetworkInterfaces)' \
+              --output text 2>/dev/null || echo "0")
+            
+            echo "Attempt $i: $ENI_COUNT network interfaces still attached"
+            
+            if [ "$ENI_COUNT" = "0" ]; then
+              echo "All network interfaces detached!"
+              break
+            fi
+            
+            sleep 5
+          done
+          
+          echo "Deleting old security group..."
+          aws ec2 delete-security-group --group-id $EXISTING_SG 2>/dev/null || echo "Could not delete, reusing existing SG"
+          sleep 2
         fi
         
-        # Create fresh security group
+        # Create fresh security group (or reuse if deletion failed)
         echo "Creating new security group..."
         SG_ID=$(aws ec2 create-security-group \
           --group-name servermonitoring-api-sg \
           --description "Security group for Server Monitoring API" \
           --vpc-id $VPC_ID \
           --query 'GroupId' \
-          --output text)
+          --output text 2>/dev/null || \
+          aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
         
         echo "Created SG: $SG_ID"
         sleep 2
@@ -412,19 +436,40 @@ jobs:
           --output text 2>/dev/null || echo "None")
         
         if [ "$EXISTING_SG_WEB" != "None" ]; then
-          echo "Force deleting old web security group: $EXISTING_SG_WEB"
-          aws ec2 delete-security-group --group-id $EXISTING_SG_WEB 2>/dev/null || true
-          sleep 5
+          echo "Found existing web security group: $EXISTING_SG_WEB"
+          echo "Waiting for network interfaces to detach..."
+          
+          for i in {1..12}; do
+            ENI_COUNT=$(aws ec2 describe-network-interfaces \
+              --filters "Name=group-id,Values=$EXISTING_SG_WEB" \
+              --query 'length(NetworkInterfaces)' \
+              --output text 2>/dev/null || echo "0")
+            
+            echo "Attempt $i: $ENI_COUNT network interfaces still attached"
+            
+            if [ "$ENI_COUNT" = "0" ]; then
+              break
+            fi
+            
+            sleep 5
+          done
+          
+          aws ec2 delete-security-group --group-id $EXISTING_SG_WEB 2>/dev/null || echo "Could not delete, reusing existing SG"
+          sleep 2
         fi
         
-        # Create fresh web security group
+        # Create fresh web security group (or reuse if deletion failed)
         echo "Creating new web security group..."
         SG_ID_WEB=$(aws ec2 create-security-group \
           --group-name servermonitoring-web-sg \
           --description "Security group for Server Monitoring Web" \
           --vpc-id $VPC_ID \
           --query 'GroupId' \
-          --output text)
+          --output text 2>/dev/null || \
+          aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
         
         echo "Web SG: $SG_ID_WEB"
         sleep 2

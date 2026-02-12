@@ -7,10 +7,11 @@
 .env.local
 .env.*.local
 *.env
+.env.production
+.env.development
 !.env.example
-!.env.production
 
-# Note: .env.production is a template, actual production .env should not be committed
+# Note: Only .env.example should be committed as a template
 
 # Docker
 .docker/
