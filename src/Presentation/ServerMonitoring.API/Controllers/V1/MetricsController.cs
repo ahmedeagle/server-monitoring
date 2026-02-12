@@ -29,7 +29,7 @@ public class MetricsController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return BadRequest(result.Message);
         }
         
         return Ok(result.Data);

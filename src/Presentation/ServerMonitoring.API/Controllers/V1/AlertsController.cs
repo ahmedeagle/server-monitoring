@@ -30,7 +30,7 @@ public class AlertsController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return BadRequest(result.Message);
         }
         
         return Ok(result.Data);
@@ -45,7 +45,7 @@ public class AlertsController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return BadRequest(result.Message);
         }
         
         // Filter by serverId
@@ -63,7 +63,7 @@ public class AlertsController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return BadRequest(result.Message);
         }
         
         return NoContent();
@@ -79,7 +79,7 @@ public class AlertsController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return BadRequest(result.Message);
         }
         
         return NoContent();

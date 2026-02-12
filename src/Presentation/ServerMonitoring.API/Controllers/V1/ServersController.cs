@@ -29,7 +29,7 @@ public class ServersController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.ErrorMessage);
+            return BadRequest(result.Message);
         }
         
         return Ok(result.Data);
@@ -43,7 +43,7 @@ public class ServersController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return NotFound(result.ErrorMessage);
+            return NotFound(result.Message);
         }
         
         return Ok(result.Data);
@@ -59,7 +59,7 @@ public class ServersController : ControllerBase
         {
             Name = dto.Name,
             Hostname = dto.Hostname,
-            IPAddress = dto.IPAddress,
+            IPAddress = dto.IpAddress,
             Port = dto.Port,
             OperatingSystem = dto.OperatingSystem
         };
@@ -68,7 +68,7 @@ public class ServersController : ControllerBase
         
         if (!result.IsSuccess)
         {
-            return BadRequest(result.ErrorMessage);
+            return BadRequest(result.Message);
         }
         
         return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result.Data);
