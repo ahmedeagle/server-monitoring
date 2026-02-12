@@ -56,40 +56,12 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
         echo "API_IMAGE=$ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-    - name: Get existing API IP for Web build (if service exists)
-      id: existing-api-ip
-      run: |
-        # Try to get existing API service IP
-        echo "Checking for existing API service..."
-        API_TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_API_SERVICE }} --query 'taskArns[0]' --output text 2>/dev/null || echo "")
-        
-        if [ ! -z "$API_TASK_ARN" ] && [ "$API_TASK_ARN" != "None" ]; then
-          API_ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $API_TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text 2>/dev/null || echo "")
-          if [ ! -z "$API_ENI_ID" ]; then
-            EXISTING_API_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $API_ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text 2>/dev/null || echo "")
-            if [ ! -z "$EXISTING_API_IP" ] && [ "$EXISTING_API_IP" != "None" ]; then
-              echo "Found existing API IP: $EXISTING_API_IP"
-              echo "API_IP=$EXISTING_API_IP" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-          fi
-        fi
-        
-        echo "No existing API service found - will use placeholder"
-        echo "API_IP=PLACEHOLDER" >> $GITHUB_OUTPUT
-
     - name: Build, tag, and push Web image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
-        API_URL: http://${{ steps.existing-api-ip.outputs.API_IP }}:8080
       run: |
-        echo "Building Web image with API_URL=$API_URL"
-        docker build \
-          --build-arg VITE_API_URL=$API_URL \
-          -t $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG \
-          -f ServerMonitoring.Web/Dockerfile \
-          ServerMonitoring.Web
+        docker build -t $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG -f ServerMonitoring.Web/Dockerfile ServerMonitoring.Web
         docker tag $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
