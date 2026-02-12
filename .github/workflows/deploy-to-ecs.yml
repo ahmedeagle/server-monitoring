@@ -43,6 +43,59 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
         echo "API_IMAGE=$ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
+    - name: Create IAM roles for ECS
+      run: |
+        # Create ECS Task Execution Role
+        EXEC_ROLE_EXISTS=$(aws iam get-role --role-name ecsTaskExecutionRole-ServerMonitoring --query 'Role.RoleName' --output text 2>/dev/null || echo "None")
+        
+        if [ "$EXEC_ROLE_EXISTS" = "None" ]; then
+          echo "Creating ecsTaskExecutionRole-ServerMonitoring..."
+          
+          cat > trust-policy.json <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+        EOF
+          
+          aws iam create-role \
+            --role-name ecsTaskExecutionRole-ServerMonitoring \
+            --assume-role-policy-document file://trust-policy.json
+          
+          aws iam attach-role-policy \
+            --role-name ecsTaskExecutionRole-ServerMonitoring \
+            --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+          
+          echo "Waiting for role to be available..."
+          sleep 10
+        else
+          echo "ecsTaskExecutionRole-ServerMonitoring already exists"
+        fi
+        
+        # Create ECS Task Role
+        TASK_ROLE_EXISTS=$(aws iam get-role --role-name ecsTaskRole-ServerMonitoring --query 'Role.RoleName' --output text 2>/dev/null || echo "None")
+        
+        if [ "$TASK_ROLE_EXISTS" = "None" ]; then
+          echo "Creating ecsTaskRole-ServerMonitoring..."
+          
+          aws iam create-role \
+            --role-name ecsTaskRole-ServerMonitoring \
+            --assume-role-policy-document file://trust-policy.json
+          
+          echo "Waiting for role to be available..."
+          sleep 10
+        else
+          echo "ecsTaskRole-ServerMonitoring already exists"
+        fi
+
     - name: Create API task definition
       run: |
         cat > api-task-definition.json <<EOF
