@@ -635,6 +635,14 @@ jobs:
             --port 80 \
             --cidr 0.0.0.0/0 2>/dev/null || true
         
+        # Allow web tasks to access VPC endpoints (ECR)
+        echo "Adding VPC endpoint access for web tasks..."
+        aws ec2 authorize-security-group-ingress \
+            --group-id sg-0796900368936631a \
+            --protocol tcp \
+            --port 443 \
+            --source-group $SG_ID_WEB 2>/dev/null || echo "VPC endpoint rule may already exist"
+        
         # Check if web service exists
         WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         

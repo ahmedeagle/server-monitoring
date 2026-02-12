@@ -21,6 +21,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS publish
 
 WORKDIR /app
 
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN groupadd -r -g 1001 appuser && useradd -r -g appuser -u 1001 appuser
 
