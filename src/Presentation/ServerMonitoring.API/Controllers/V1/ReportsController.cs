@@ -41,11 +41,15 @@ public class ReportsController : ControllerBase
             var endDate = DateTime.UtcNow;
 
             // Enqueue fire-and-forget job
-            BackgroundJob.Enqueue<ReportGenerationJob>(job => 
+            var jobId = BackgroundJob.Enqueue<ReportGenerationJob>(job => 
                 job.GenerateReportAsync(serverId, startDate, endDate, reportId));
 
-            _logger.LogInformation("Report generation enqueued. Server: {ServerId}, Report: {ReportId}", 
-                serverId, reportId);
+            // Continuation job: Process after report generation completes
+            BackgroundJob.ContinueJobWith<ReportGenerationJob>(jobId, job => 
+                job.NotifyReportCompletionAsync(reportId));
+
+            _logger.LogInformation("Report generation enqueued with continuation. Server: {ServerId}, Report: {ReportId}, JobId: {JobId}", 
+                serverId, reportId, jobId);
 
             return Accepted(new
             {

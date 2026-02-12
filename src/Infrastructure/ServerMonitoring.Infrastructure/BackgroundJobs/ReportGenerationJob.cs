@@ -100,4 +100,31 @@ public class ReportGenerationJob
         _logger.LogInformation("Report {ReportId} status updated to {Status}", reportId, status);
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Continuation job: Process and notify after report generation completes
+    /// This demonstrates Hangfire continuation jobs
+    /// </summary>
+    /// <param name="reportId">The completed report ID</param>
+    public async Task NotifyReportCompletionAsync(string reportId)
+    {
+        _logger.LogInformation("Processing continuation job for completed report {ReportId}", reportId);
+
+        try
+        {
+            // Simulate post-processing tasks
+            await Task.Delay(1000);
+
+            // Send notification (email, SignalR, etc.)
+            _logger.LogInformation("Notification sent for report {ReportId}", reportId);
+
+            // Update analytics or trigger other workflows
+            _logger.LogInformation("Post-processing completed for report {ReportId}", reportId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process continuation job for report {ReportId}", reportId);
+            throw;
+        }
+    }
 }
