@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import Dashboard from '../pages/Dashboard';
+import DashboardPage from '../pages/DashboardPage';
 import { serverService } from '../services/serverService';
 import { metricService } from '../services/metricService';
 
@@ -36,7 +36,7 @@ describe('Dashboard Component', () => {
   it('should render dashboard title', () => {
     render(
       <BrowserRouter>
-        <Dashboard />
+        <DashboardPage />
       </BrowserRouter>
     );
 
@@ -46,7 +46,7 @@ describe('Dashboard Component', () => {
   it('should display loading state initially', () => {
     render(
       <BrowserRouter>
-        <Dashboard />
+        <DashboardPage />
       </BrowserRouter>
     );
 
@@ -56,7 +56,7 @@ describe('Dashboard Component', () => {
   it('should load and display server data', async () => {
     render(
       <BrowserRouter>
-        <Dashboard />
+        <DashboardPage />
       </BrowserRouter>
     );
 
@@ -71,7 +71,7 @@ describe('Dashboard Component', () => {
   it('should display server status correctly', async () => {
     render(
       <BrowserRouter>
-        <Dashboard />
+        <DashboardPage />
       </BrowserRouter>
     );
 
@@ -84,7 +84,7 @@ describe('Dashboard Component', () => {
   it('should load metrics data', async () => {
     render(
       <BrowserRouter>
-        <Dashboard />
+        <DashboardPage />
       </BrowserRouter>
     );
 

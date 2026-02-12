@@ -41,7 +41,7 @@ describe('ServerList Component', () => {
   it('should render server list', async () => {
     render(
       <BrowserRouter>
-        <ServerList />
+        <ServersPage />
       </BrowserRouter>
     );
 
@@ -54,7 +54,7 @@ describe('ServerList Component', () => {
   it('should display server status', async () => {
     render(
       <BrowserRouter>
-        <ServerList />
+        <ServersPage />
       </BrowserRouter>
     );
 
@@ -67,7 +67,7 @@ describe('ServerList Component', () => {
   it('should filter servers by search term', async () => {
     render(
       <BrowserRouter>
-        <ServerList />
+        <ServersPage />
       </BrowserRouter>
     );
 
@@ -88,7 +88,7 @@ describe('ServerList Component', () => {
   it('should open create dialog', () => {
     render(
       <BrowserRouter>
-        <ServerList />
+        <ServersPage />
       </BrowserRouter>
     );
 
@@ -103,7 +103,7 @@ describe('ServerList Component', () => {
 
     render(
       <BrowserRouter>
-        <ServerList />
+        <ServersPage />
       </BrowserRouter>
     );
 

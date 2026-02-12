@@ -1,8 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 import { serverService } from '../services/serverService';
 
-vi.mock('axios');
+// Mock axios
+vi.mock('axios', () => ({
+  default: {
+    create: vi.fn(() => ({
+      interceptors: {
+        request: { use: vi.fn(), eject: vi.fn() },
+        response: { use: vi.fn(), eject: vi.fn() }
+      },
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn()
+    }))
+  }
+}));
+
 const mockedAxios = vi.mocked(axios, true);
 
 describe('ServerService', () => {

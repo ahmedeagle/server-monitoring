@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import Login from '../pages/Login';
+import LoginPage from '../pages/LoginPage';
 import { authService } from '../services/authService';
 
 // Mock auth service
@@ -30,7 +30,7 @@ describe('Login Component', () => {
   it('should render login form', () => {
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
@@ -42,7 +42,7 @@ describe('Login Component', () => {
   it('should handle username input', () => {
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
@@ -55,7 +55,7 @@ describe('Login Component', () => {
   it('should handle password input', () => {
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
@@ -76,7 +76,7 @@ describe('Login Component', () => {
 
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
@@ -101,7 +101,7 @@ describe('Login Component', () => {
 
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
@@ -125,7 +125,7 @@ describe('Login Component', () => {
 
     render(
       <BrowserRouter>
-        <Login />
+        <LoginPage />
       </BrowserRouter>
     );
 
