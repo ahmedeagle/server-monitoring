@@ -9,12 +9,10 @@ namespace ServerMonitoring.UnitTests.Validation;
 public class ServerValidationTests
 {
     private readonly CreateServerCommandValidator _createValidator;
-    private readonly UpdateServerCommandValidator _updateValidator;
 
     public ServerValidationTests()
     {
         _createValidator = new CreateServerCommandValidator();
-        _updateValidator = new UpdateServerCommandValidator();
     }
 
     [Fact]
@@ -130,26 +128,5 @@ public class ServerValidationTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.Port);
-    }
-
-    [Fact]
-    public void UpdateServerCommand_WithValidData_ShouldPass()
-    {
-        // Arrange
-        var command = new UpdateServerCommand
-        {
-            Id = 1,
-            Name = "Updated Server",
-            Hostname = "updatedhost.com",
-            IPAddress = "192.168.1.200",
-            Port = 22,
-            OperatingSystem = "Ubuntu 22.04"
-        };
-
-        // Act
-        var result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
     }
 }

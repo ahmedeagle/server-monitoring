@@ -67,7 +67,7 @@ public class AlertEntityTests
     [InlineData(AlertType.CpuUsage)]
     [InlineData(AlertType.MemoryUsage)]
     [InlineData(AlertType.DiskUsage)]
-    [InlineData(AlertType.NetworkLatency)]
+    [InlineData(AlertType.DiskSpace)]
     public void Alert_ShouldAcceptAllValidTypes(AlertType type)
     {
         // Arrange & Act
