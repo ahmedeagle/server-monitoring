@@ -190,11 +190,7 @@ jobs:
                 },
                 {
                   "name": "UseInMemoryDatabase",
-                  "value": "false"
-                },
-                {
-                  "name": "ConnectionStrings__DefaultConnection",
-                  "value": "Data Source=servermonitoring.db"
+                  "value": "true"
                 },
                 {
                   "name": "JWT_ISSUER",
