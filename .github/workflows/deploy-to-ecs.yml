@@ -166,6 +166,11 @@ jobs:
           "memory": "1024",
           "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole-ServerMonitoring",
           "taskRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskRole-ServerMonitoring",
+          "volumes": [
+            {
+              "name": "database-storage"
+            }
+          ],
           "containerDefinitions": [
             {
               "name": "${{ env.API_CONTAINER_NAME }}",
@@ -173,6 +178,13 @@ jobs:
               "cpu": 512,
               "memory": 1024,
               "essential": true,
+              "mountPoints": [
+                {
+                  "sourceVolume": "database-storage",
+                  "containerPath": "/data",
+                  "readOnly": false
+                }
+              ],
               "portMappings": [
                 {
                   "containerPort": 8080,
@@ -190,7 +202,11 @@ jobs:
                 },
                 {
                   "name": "UseInMemoryDatabase",
-                  "value": "true"
+                  "value": "false"
+                },
+                {
+                  "name": "ConnectionStrings__DefaultConnection",
+                  "value": "Data Source=/data/servermonitoring.db"
                 },
                 {
                   "name": "JWT_ISSUER",
