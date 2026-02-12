@@ -238,31 +238,20 @@ jobs:
       run: |
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
-        if [ "$SERVICE_EXISTS" = "ACTIVE" ] || [ "$SERVICE_EXISTS" = "DRAINING" ]; then
-          echo "Service exists with status: $SERVICE_EXISTS, deleting..."
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }} --desired-count 0 2>/dev/null || true
-          aws ecs delete-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }} 2>/dev/null || true
+        if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
+          echo "Service exists, updating with new task definition..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_API_SERVICE }} \
+            --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 300
           
-          echo "Waiting for service to be fully deleted..."
-          for i in {1..30}; do
-            SERVICE_STATUS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
-            echo "Attempt $i: Service status = $SERVICE_STATUS"
-            
-            if [ "$SERVICE_STATUS" = "INACTIVE" ] || [ "$SERVICE_STATUS" = "MISSING" ]; then
-              echo "Service fully deleted!"
-              break
-            fi
-            
-            if [ $i -eq 30 ]; then
-              echo "Timeout waiting for service deletion!"
-              exit 1
-            fi
-            
-            sleep 10
-          done
+          echo "✅ Service updated successfully!"
+          exit 0
         fi
         
-        echo "Creating service..."
+        echo "Creating new service..."
         
         SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
         echo "Subnets: $SUBNETS"
@@ -649,36 +638,34 @@ jobs:
         # Check if web service exists
         WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
-        if [ "$WEB_SERVICE_EXISTS" = "ACTIVE" ] || [ "$WEB_SERVICE_EXISTS" = "DRAINING" ]; then
-          echo "Web service exists, deleting..."
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_WEB_SERVICE }} --desired-count 0 2>/dev/null || true
-          aws ecs delete-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_WEB_SERVICE }} 2>/dev/null || true
-          
-          for i in {1..30}; do
-            WEB_STATUS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
-            if [ "$WEB_STATUS" = "INACTIVE" ] || [ "$WEB_STATUS" = "MISSING" ]; then
-              break
-            fi
-            sleep 10
-          done
-        fi
-        
-        # Create web service
-        echo "Creating web service..."
-        aws ecs create-service \
+        if [ "$WEB_SERVICE_EXISTS" = "ACTIVE" ]; then
+          echo "Web service exists, updating with new task definition..."
+          aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
-            --service-name ${{ env.ECS_WEB_SERVICE }} \
+            --service ${{ env.ECS_WEB_SERVICE }} \
             --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
-            --desired-count 1 \
-            --launch-type FARGATE \
-            --health-check-grace-period-seconds 300 \
-            --network-configuration "{
-              \"awsvpcConfiguration\": {
-                \"subnets\": $SUBNETS,
-                \"securityGroups\": [\"$SG_ID_WEB\"],
-                \"assignPublicIp\": \"ENABLED\"
-              }
-            }"
+            --force-new-deployment \
+            --health-check-grace-period-seconds 300
+          
+          echo "✅ Web service updated successfully!"
+        else
+          # Create web service
+          echo "Creating web service..."
+          aws ecs create-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service-name ${{ env.ECS_WEB_SERVICE }} \
+              --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --health-check-grace-period-seconds 300 \
+              --network-configuration "{
+                \"awsvpcConfiguration\": {
+                  \"subnets\": $SUBNETS,
+                  \"securityGroups\": [\"$SG_ID_WEB\"],
+                  \"assignPublicIp\": \"ENABLED\"
+                }
+              }"
+        fi
 
     - name: Check Web service created
       run: |
