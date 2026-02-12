@@ -1,120 +1,94 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios from 'axios';
 import { serverService } from '../services/serverService';
+import api from '../services/api';
 
-// Mock axios
-vi.mock('axios', () => ({
+// Mock the api module
+vi.mock('../services/api', () => ({
   default: {
-    create: vi.fn(() => ({
-      interceptors: {
-        request: { use: vi.fn(), eject: vi.fn() },
-        response: { use: vi.fn(), eject: vi.fn() }
-      },
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn()
-    }))
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn()
   }
 }));
-
-const mockedAxios = vi.mocked(axios, true);
 
 describe('ServerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('getServers', () => {
-    it('should fetch servers with pagination', async () => {
-      const mockResponse = {
-        data: {
-          data: [
-            { id: 1, name: 'Server 1', status: 'Up' },
-            { id: 2, name: 'Server 2', status: 'Down' },
-          ],
-          total: 2,
-          page: 1,
-          pageSize: 10,
-        },
-      };
+  describe('getAll', () => {
+    it('should fetch all servers', async () => {
+      const mockServers = [
+        { id: 1, name: 'Server 1', status: 'Online' },
+        { id: 2, name: 'Server 2', status: 'Offline' }
+      ];
 
-      mockedAxios.get.mockResolvedValue(mockResponse);
+      vi.mocked(api.get).mockResolvedValue({ data: mockServers });
 
-      const result = await serverService.getServers({ page: 1, pageSize: 10 });
+      const result = await serverService.getAll();
 
-      expect(mockedAxios.get).toHaveBeenCalledWith('/api/v1/servers', {
-        params: { page: 1, pageSize: 10 },
-      });
-      expect(result).toEqual(mockResponse.data);
-    });
-
-    it('should include search parameter when provided', async () => {
-      mockedAxios.get.mockResolvedValue({ data: { data: [], total: 0 } });
-
-      await serverService.getServers({ page: 1, pageSize: 10, search: 'test' });
-
-      expect(mockedAxios.get).toHaveBeenCalledWith('/api/v1/servers', {
-        params: { page: 1, pageSize: 10, search: 'test' },
-      });
+      expect(api.get).toHaveBeenCalledWith('/v1/servers');
+      expect(result).toEqual(mockServers);
     });
   });
 
-  describe('getServerById', () => {
+  describe('getById', () => {
     it('should fetch server by ID', async () => {
-      const mockServer = { id: 1, name: 'Test Server', status: 'Up' };
-      mockedAxios.get.mockResolvedValue({ data: mockServer });
+      const mockServer = { id: 1, name: 'Test Server', status: 'Online' };
+      
+      vi.mocked(api.get).mockResolvedValue({ data: mockServer });
 
-      const result = await serverService.getServerById(1);
+      const result = await serverService.getById(1);
 
-      expect(mockedAxios.get).toHaveBeenCalledWith('/api/v1/servers/1');
+      expect(api.get).toHaveBeenCalledWith('/v1/servers/1');
       expect(result).toEqual(mockServer);
     });
   });
 
-  describe('createServer', () => {
+  describe('create', () => {
     it('should create new server', async () => {
       const newServer = {
         name: 'New Server',
         hostname: 'new-server',
         ipAddress: '192.168.1.100',
-        port: 443,
+        port: 22
       };
       const mockResponse = { data: { id: 1, ...newServer } };
 
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      vi.mocked(api.post).mockResolvedValue(mockResponse);
 
-      const result = await serverService.createServer(newServer);
+      const result = await serverService.create(newServer);
 
-      expect(mockedAxios.post).toHaveBeenCalledWith('/api/v1/servers', newServer);
+      expect(api.post).toHaveBeenCalledWith('/v1/servers', newServer);
       expect(result).toEqual(mockResponse.data);
     });
   });
 
-  describe('updateServer', () => {
+  describe('update', () => {
     it('should update existing server', async () => {
       const updatedServer = {
-        id: 1,
         name: 'Updated Server',
-        hostname: 'updated-server',
-        ipAddress: '192.168.1.100',
+        hostname: 'updated-server'
       };
-      mockedAxios.put.mockResolvedValue({ data: updatedServer });
+      const mockResponse = { data: { id: 1, ...updatedServer } };
+      
+      vi.mocked(api.put).mockResolvedValue(mockResponse);
 
-      const result = await serverService.updateServer(1, updatedServer);
+      const result = await serverService.update(1, updatedServer);
 
-      expect(mockedAxios.put).toHaveBeenCalledWith('/api/v1/servers/1', updatedServer);
-      expect(result).toEqual(updatedServer);
+      expect(api.put).toHaveBeenCalledWith('/v1/servers/1', updatedServer);
+      expect(result).toEqual(mockResponse.data);
     });
   });
 
-  describe('deleteServer', () => {
+  describe('delete', () => {
     it('should delete server', async () => {
-      mockedAxios.delete.mockResolvedValue({ data: null });
+      vi.mocked(api.delete).mockResolvedValue({ data: null });
 
-      await serverService.deleteServer(1);
+      await serverService.delete(1);
 
-      expect(mockedAxios.delete).toHaveBeenCalledWith('/api/v1/servers/1');
+      expect(api.delete).toHaveBeenCalledWith('/v1/servers/1');
     });
   });
 });
