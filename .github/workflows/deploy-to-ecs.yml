@@ -103,7 +103,7 @@ jobs:
 
   # Deployment (only runs if all tests pass)
   deploy:
-    needs: [backend-integration-tests, frontend-tests]
+    needs: [backend-unit-tests, backend-integration-tests, frontend-tests]
     name: Deploy to ECS
     runs-on: ubuntu-latest
     
