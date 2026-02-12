@@ -19,6 +19,7 @@ import {
   TextField,
   MenuItem,
   CircularProgress,
+  Alert,
 } from '@mui/material'
 import { Add, Download } from '@mui/icons-material'
 import { reportService, Report } from '@/services/reportService'
@@ -35,6 +36,8 @@ const ReportsPage = () => {
     startDate: format(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
     endDate: format(new Date(), 'yyyy-MM-dd'),
   })
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({})
+  const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
     loadReports()
@@ -59,6 +62,8 @@ const ReportsPage = () => {
       startDate: format(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
       endDate: format(new Date(), 'yyyy-MM-dd'),
     })
+    setFormErrors({})
+    setSubmitError('')
     setOpenDialog(true)
   }
 
@@ -66,12 +71,43 @@ const ReportsPage = () => {
     setOpenDialog(false)
   }
 
+  const validateForm = () => {
+    const errors: {[key: string]: string} = {}
+
+    if (!formData.title || formData.title.trim() === '') {
+      errors.title = 'Title is required'
+    } else if (formData.title.length > 200) {
+      errors.title = 'Title must not exceed 200 characters'
+    }
+
+    if (formData.description && formData.description.length > 1000) {
+      errors.description = 'Description must not exceed 1000 characters'
+    }
+
+    const start = new Date(formData.startDate)
+    const end = new Date(formData.endDate)
+    if (start > end) {
+      errors.endDate = 'End date must be after start date'
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSubmit = async () => {
+    setSubmitError('')
+
+    if (!validateForm()) {
+      setSubmitError('Please fix the errors above')
+      return
+    }
+
     try {
       await reportService.generate(formData)
       handleCloseDialog()
       loadReports()
-    } catch (error) {
+    } catch (error: any) {
+      setSubmitError(error.response?.data?.message || 'Failed to generate report')
       console.error('Failed to generate report:', error)
     }
   }
@@ -170,12 +206,20 @@ const ReportsPage = () => {
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Generate Report</DialogTitle>
         <DialogContent>
+          {submitError && (
+            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+              {submitError}
+            </Alert>
+          )}
           <TextField
             fullWidth
             margin="normal"
             label="Title"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            error={!!formErrors.title}
+            helperText={formErrors.title}
+            required
           />
           <TextField
             fullWidth
@@ -185,6 +229,8 @@ const ReportsPage = () => {
             rows={3}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            error={!!formErrors.description}
+            helperText={formErrors.description}
           />
           <TextField
             fullWidth
@@ -193,6 +239,7 @@ const ReportsPage = () => {
             select
             value={formData.type}
             onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+            required
           >
             <MenuItem value="DailyMetrics">Daily Metrics</MenuItem>
             <MenuItem value="WeeklyMetrics">Weekly Metrics</MenuItem>
@@ -209,6 +256,7 @@ const ReportsPage = () => {
             value={formData.startDate}
             onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
             InputLabelProps={{ shrink: true }}
+            required
           />
           <TextField
             fullWidth
@@ -218,6 +266,9 @@ const ReportsPage = () => {
             value={formData.endDate}
             onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
             InputLabelProps={{ shrink: true }}
+            error={!!formErrors.endDate}
+            helperText={formErrors.endDate}
+            required
           />
         </DialogContent>
         <DialogActions>
