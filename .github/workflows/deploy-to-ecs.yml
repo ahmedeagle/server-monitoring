@@ -719,4 +719,74 @@ jobs:
         echo "Access your application at: http://$WEB_PUBLIC_IP"
         echo "If IPs show 'pending', tasks are still starting. Check ECS console."
         echo "========================================="
+        
+        # Export IPs for next step
+        echo "WEB_IP=$WEB_PUBLIC_IP" >> $GITHUB_ENV
+        echo "API_IP=$API_PUBLIC_IP" >> $GITHUB_ENV
+    
+    - name: Update deployment URLs file
+      run: |
+        cat > CURRENT_DEPLOYMENT.md <<EOF
+        # 🚀 Current Deployment URLs
+        
+        **Last Updated:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')  
+        **Commit:** ${{ github.sha }}
+        
+        ---
+        
+        ## 🌐 Access Your Application
+        
+        ### Web Application (React Frontend)
+        **URL:** http://${{ env.WEB_IP }}
+        
+        - Login Page: http://${{ env.WEB_IP }}/login
+        - Dashboard: http://${{ env.WEB_IP }}/
+        
+        **Test Credentials:**
+        - Admin: \`admin\` / \`Admin@123\`
+        - User: \`user\` / \`User@123\`
+        
+        ---
+        
+        ### API Backend (.NET)
+        **Base URL:** http://${{ env.API_IP }}:8080
+        
+        - Swagger UI: http://${{ env.API_IP }}:8080/swagger
+        - Health Check: http://${{ env.API_IP }}:8080/health
+        - API v1: http://${{ env.API_IP }}:8080/api/v1/
+        
+        ---
+        
+        ## 📊 Service Status
+        
+        | Service | Status | IP Address |
+        |---------|--------|------------|
+        | Web (React) | ✅ Running | ${{ env.WEB_IP }} |
+        | API (.NET) | ✅ Running | ${{ env.API_IP }} |
+        
+        ---
+        
+        ## 🔄 Why IPs Change
+        
+        ECS Fargate tasks are destroyed and recreated with each deployment, receiving new public IPs. This is normal behavior.
+        
+        **Always check this file for the latest URLs after deployment.**
+        
+        ---
+        
+        ## 🏗️ Infrastructure Details
+        
+        - **Cloud Provider:** AWS (us-east-1)
+        - **Orchestration:** ECS Fargate
+        - **Container Registry:** Amazon ECR
+        - **Deployment:** GitHub Actions CI/CD
+        - **Network:** Public subnets with Internet Gateway
+        
+        EOF
+        
+        git config user.name "GitHub Actions Bot"
+        git config user.email "actions@github.com"
+        git add CURRENT_DEPLOYMENT.md
+        git diff --staged --quiet || git commit -m "Update deployment URLs [skip ci]"
+        git push origin main || echo "No changes to push"
 
