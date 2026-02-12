@@ -8,12 +8,9 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_API_REPOSITORY: servermonitoring-api
-  ECR_WEB_REPOSITORY: servermonitoring-web
   ECS_CLUSTER: servermonitoring-cluster
   ECS_API_SERVICE: servermonitoring-api-service
-  ECS_WEB_SERVICE: servermonitoring-web-service
   API_CONTAINER_NAME: api
-  WEB_CONTAINER_NAME: web
 
 jobs:
   deploy:
@@ -46,17 +43,6 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_API_REPOSITORY:latest
         echo "API_IMAGE=$ECR_REGISTRY/$ECR_API_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-    - name: Build, tag, and push Web image to Amazon ECR
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        docker build -t $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG -f ServerMonitoring.Web/Dockerfile ServerMonitoring.Web
-        docker tag $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_WEB_REPOSITORY:latest
-        echo "WEB_IMAGE=$ECR_REGISTRY/$ECR_WEB_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
-
     - name: Create API task definition
       run: |
         cat > api-task-definition.json <<EOF
@@ -64,16 +50,16 @@ jobs:
           "family": "servermonitoring-api",
           "networkMode": "awsvpc",
           "requiresCompatibilities": ["FARGATE"],
-          "cpu": "1024",
-          "memory": "2048",
+          "cpu": "512",
+          "memory": "1024",
           "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole-ServerMonitoring",
           "taskRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskRole-ServerMonitoring",
           "containerDefinitions": [
             {
               "name": "${{ env.API_CONTAINER_NAME }}",
               "image": "${{ env.API_IMAGE }}",
-              "cpu": 1024,
-              "memory": 2048,
+              "cpu": 512,
+              "memory": 1024,
               "essential": true,
               "portMappings": [
                 {
@@ -109,7 +95,7 @@ jobs:
                 "interval": 30,
                 "timeout": 5,
                 "retries": 3,
-                "startPeriod": 60
+                "startPeriod": 120
               }
             }
           ]
@@ -127,38 +113,37 @@ jobs:
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
         if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
-          echo "Updating existing service..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_API_SERVICE }} \
-            --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
-            --force-new-deployment
-        else
-          echo "Creating new service..."
-          
-          SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
-          echo "Available Subnets: $SUBNETS"
-          
-          VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
-          echo "VPC ID: $VPC_ID"
-          
-          if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
-            echo "ERROR: No subnets available in the AWS account!"
-            exit 1
-          fi
-          
-          SG_ID=$(aws ec2 create-security-group \
-            --group-name servermonitoring-api-sg \
-            --description "Security group for Server Monitoring API" \
-            --vpc-id $VPC_ID \
-            --query 'GroupId' \
-            --output text 2>/dev/null || \
-            aws ec2 describe-security-groups \
-              --filters "Name=group-name,Values=servermonitoring-api-sg" \
-              --query 'SecurityGroups[0].GroupId' \
-              --output text)
-          
-          echo "Security Group ID: $SG_ID"
+          echo "Service exists, deleting and recreating..."
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }} --desired-count 0
+          aws ecs delete-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_API_SERVICE }}
+          sleep 10
+        fi
+        
+        echo "Creating service..."
+        
+        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+        echo "Subnets: $SUBNETS"
+        
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        echo "VPC: $VPC_ID"
+        
+        if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
+          echo "ERROR: No subnets available!"
+          exit 1
+        fi
+        
+        SG_ID=$(aws ec2 create-security-group \
+          --group-name servermonitoring-api-sg \
+          --description "Security group for Server Monitoring API" \
+          --vpc-id $VPC_ID \
+          --query 'GroupId' \
+          --output text 2>/dev/null || \
+          aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=servermonitoring-api-sg" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
+        
+        echo "SG: $SG_ID"
           
           aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
@@ -191,8 +176,16 @@ jobs:
     - name: Get service URL
       run: |
         TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_API_SERVICE }} --query 'taskArns[0]' --output text)
+        
+        if [ "$TASK_ARN" = "None" ] || [ -z "$TASK_ARN" ]; then
+          echo "No tasks running!"
+          exit 1
+        fi
+        
         ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
         PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
         
-        echo "API URL: http://$PUBLIC_IP:8080/swagger"
+        echo "========================================="
+        echo "API: http://$PUBLIC_IP:8080/swagger"
         echo "Health: http://$PUBLIC_IP:8080/health"
+        echo "========================================="
