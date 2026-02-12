@@ -43,11 +43,21 @@ RUN apk upgrade --no-cache \
     ca-certificates \
     tzdata
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy custom nginx configuration as template
+COPY nginx.conf /etc/nginx/nginx.conf.template
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Copy built app from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# Set default API URL (can be overridden at runtime)
+ENV API_URL=http://localhost:8080
+
+# Use custom entrypoint
+ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Create non-root user (security best practice)
 RUN addgroup -g 1001 -S appuser \

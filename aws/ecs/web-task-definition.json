@@ -21,6 +21,10 @@
       ],
       "environment": [
         {
+          "name": "API_URL",
+          "value": "${API_URL}"
+        },
+        {
           "name": "VITE_API_URL",
           "value": "${API_URL}"
         },

@@ -228,67 +228,10 @@ jobs:
         }
         EOF
 
-    - name: Create Web task definition
-      run: |
-        cat > web-task-definition.json <<EOF
-        {
-          "family": "servermonitoring-web",
-          "networkMode": "awsvpc",
-          "requiresCompatibilities": ["FARGATE"],
-          "cpu": "256",
-          "memory": "512",
-          "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole-ServerMonitoring",
-          "taskRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskRole-ServerMonitoring",
-          "containerDefinitions": [
-            {
-              "name": "${{ env.WEB_CONTAINER_NAME }}",
-              "image": "${{ env.WEB_IMAGE }}",
-              "cpu": 256,
-              "memory": 512,
-              "essential": true,
-              "portMappings": [
-                {
-                  "containerPort": 80,
-                  "protocol": "tcp"
-                }
-              ],
-              "environment": [
-                {
-                  "name": "VITE_API_URL",
-                  "value": "http://localhost:8080"
-                }
-              ],
-              "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                  "awslogs-create-group": "true",
-                  "awslogs-group": "/ecs/servermonitoring-web",
-                  "awslogs-region": "${{ env.AWS_REGION }}",
-                  "awslogs-stream-prefix": "ecs"
-                }
-              },
-              "healthCheck": {
-                "command": ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"],
-                "interval": 30,
-                "timeout": 5,
-                "retries": 3,
-                "startPeriod": 60
-              }
-            }
-          ]
-        }
-        EOF
-
     - name: Register API task definition
       id: api-task-def
       run: |
         TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://api-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
-        echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
-
-    - name: Register Web task definition
-      id: web-task-def
-      run: |
-        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://web-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
     - name: Deploy to ECS
@@ -506,6 +449,7 @@ jobs:
             --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
             --desired-count 1 \
             --launch-type FARGATE \
+            --health-check-grace-period-seconds 300 \
             --network-configuration "{
               \"awsvpcConfiguration\": {
                 \"subnets\": $SUBNETS,
@@ -517,13 +461,126 @@ jobs:
 
     - name: Check API service created
       run: |
-        echo "API service created. Checking initial status..."
-        sleep 10
+        echo "API service created. Waiting for task to start..."
+        sleep 30
+        
+        # Wait for task to be running
+        for i in {1..30}; do
+          TASK_COUNT=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_API_SERVICE }} \
+            --query 'services[0].runningCount' \
+            --output text)
+          
+          echo "Attempt $i: $TASK_COUNT tasks running"
+          
+          if [ "$TASK_COUNT" = "1" ]; then
+            echo "API task is running!"
+            break
+          fi
+          
+          sleep 10
+        done
+        
         aws ecs describe-services \
           --cluster ${{ env.ECS_CLUSTER }} \
           --services ${{ env.ECS_API_SERVICE }} \
           --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}' \
           --output table
+
+    - name: Get API service IP
+      id: api-ip
+      run: |
+        echo "Getting API service public IP..."
+        API_TASK_ARN=$(aws ecs list-tasks \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service-name ${{ env.ECS_API_SERVICE }} \
+          --query 'taskArns[0]' \
+          --output text)
+        
+        if [ "$API_TASK_ARN" = "None" ] || [ -z "$API_TASK_ARN" ]; then
+          echo "ERROR: No API task found!"
+          exit 1
+        fi
+        
+        API_ENI_ID=$(aws ecs describe-tasks \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --tasks $API_TASK_ARN \
+          --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
+          --output text)
+        
+        API_PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+          --network-interface-ids $API_ENI_ID \
+          --query 'NetworkInterfaces[0].Association.PublicIp' \
+          --output text)
+        
+        echo "API_PUBLIC_IP=$API_PUBLIC_IP" >> $GITHUB_OUTPUT
+        echo "✅ API Service IP: $API_PUBLIC_IP"
+
+    - name: Create Web task definition with dynamic API URL
+      run: |
+        API_URL="http://${{ steps.api-ip.outputs.API_PUBLIC_IP }}:8080"
+        echo "Creating web task definition with API_URL=$API_URL"
+        
+        cat > web-task-definition.json <<EOF
+        {
+          "family": "servermonitoring-web",
+          "networkMode": "awsvpc",
+          "requiresCompatibilities": ["FARGATE"],
+          "cpu": "256",
+          "memory": "512",
+          "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole-ServerMonitoring",
+          "taskRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskRole-ServerMonitoring",
+          "containerDefinitions": [
+            {
+              "name": "${{ env.WEB_CONTAINER_NAME }}",
+              "image": "${{ env.WEB_IMAGE }}",
+              "cpu": 256,
+              "memory": 512,
+              "essential": true,
+              "portMappings": [
+                {
+                  "containerPort": 80,
+                  "protocol": "tcp"
+                }
+              ],
+              "environment": [
+                {
+                  "name": "API_URL",
+                  "value": "$API_URL"
+                },
+                {
+                  "name": "VITE_API_URL",
+                  "value": "$API_URL"
+                }
+              ],
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-create-group": "true",
+                  "awslogs-group": "/ecs/servermonitoring-web",
+                  "awslogs-region": "${{ env.AWS_REGION }}",
+                  "awslogs-stream-prefix": "ecs"
+                }
+              },
+              "healthCheck": {
+                "command": ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+              }
+            }
+          ]
+        }
+        EOF
+
+    - name: Register Web task definition
+      id: web-task-def
+      run: |
+        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://web-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
+        echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+        echo "✅ Web task definition registered: $TASK_DEF_ARN"
 
     - name: Deploy Web to ECS
       run: |
@@ -614,6 +671,7 @@ jobs:
             --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
             --desired-count 1 \
             --launch-type FARGATE \
+            --health-check-grace-period-seconds 300 \
             --network-configuration "{
               \"awsvpcConfiguration\": {
                 \"subnets\": $SUBNETS,
