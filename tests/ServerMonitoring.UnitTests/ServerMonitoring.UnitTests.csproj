@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\Application\ServerMonitoring.Application\ServerMonitoring.Application.csproj" />
     <ProjectReference Include="..\..\src\Domain\ServerMonitoring.Domain\ServerMonitoring.Domain.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ServerMonitoring.Infrastructure\ServerMonitoring.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Presentation\ServerMonitoring.API\ServerMonitoring.API.csproj" />
   </ItemGroup>
 
 </Project>

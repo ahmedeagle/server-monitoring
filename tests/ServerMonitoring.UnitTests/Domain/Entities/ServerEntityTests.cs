@@ -49,8 +49,8 @@ public class ServerEntityTests
     [Theory]
     [InlineData(ServerStatus.Online)]
     [InlineData(ServerStatus.Offline)]
-    [InlineData(ServerStatus.Warning)]
-    [InlineData(ServerStatus.Critical)]
+    [InlineData(ServerStatus.Maintenance)]
+    [InlineData(ServerStatus.Error)]
     [InlineData(ServerStatus.Unknown)]
     public void Server_Status_ShouldAcceptAllValidStatuses(ServerStatus status)
     {
