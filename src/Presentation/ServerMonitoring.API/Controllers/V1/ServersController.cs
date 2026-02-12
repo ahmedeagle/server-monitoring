@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ServerMonitoring.Application.DTOs;
+using ServerMonitoring.Application.Features.Servers.Commands;
+using ServerMonitoring.Application.Features.Servers.Queries;
 
 namespace ServerMonitoring.API.Controllers.V1;
 
@@ -23,16 +25,28 @@ public class ServersController : ControllerBase
     public async Task<ActionResult<List<ServerDto>>> GetAll()
     {
         _logger.LogInformation("Getting all servers");
-        // TODO: Implement GetAllServersQuery
-        return Ok(new List<ServerDto>());
+        var result = await _mediator.Send(new GetAllServersQuery());
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.ErrorMessage);
+        }
+        
+        return Ok(result.Data);
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<ServerDto>> GetById(int id)
     {
         _logger.LogInformation("Getting server {ServerId}", id);
-        // TODO: Implement GetServerByIdQuery
-        return Ok(new ServerDto());
+        var result = await _mediator.Send(new GetServerByIdQuery { Id = id });
+        
+        if (!result.IsSuccess)
+        {
+            return NotFound(result.ErrorMessage);
+        }
+        
+        return Ok(result.Data);
     }
 
     [HttpPost]
@@ -40,8 +54,24 @@ public class ServersController : ControllerBase
     public async Task<ActionResult<ServerDto>> Create([FromBody] CreateServerDto dto)
     {
         _logger.LogInformation("Creating new server: {ServerName}", dto.Name);
-        // TODO: Implement CreateServerCommand
-        return CreatedAtAction(nameof(GetById), new { id = 1 }, new ServerDto());
+        
+        var command = new CreateServerCommand
+        {
+            Name = dto.Name,
+            Hostname = dto.Hostname,
+            IPAddress = dto.IPAddress,
+            Port = dto.Port,
+            OperatingSystem = dto.OperatingSystem
+        };
+        
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.ErrorMessage);
+        }
+        
+        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result.Data);
     }
 
     [HttpPut("{id}")]
