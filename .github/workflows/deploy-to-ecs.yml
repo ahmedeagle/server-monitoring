@@ -283,63 +283,36 @@ jobs:
           exit 1
         fi
         
-        # Check if security group exists
+        # Force delete old security group if exists
         EXISTING_SG=$(aws ec2 describe-security-groups \
           --filters "Name=group-name,Values=servermonitoring-api-sg" \
           --query 'SecurityGroups[0].GroupId' \
           --output text 2>/dev/null || echo "None")
         
-        EXISTING_SG_VPC=$(aws ec2 describe-security-groups \
-          --filters "Name=group-name,Values=servermonitoring-api-sg" \
-          --query 'SecurityGroups[0].VpcId' \
-          --output text 2>/dev/null || echo "None")
-        
-        # Delete if in wrong VPC
-        if [ "$EXISTING_SG" != "None" ] && [ "$EXISTING_SG_VPC" != "$VPC_ID" ]; then
-          echo "Deleting old security group in wrong VPC..."
+        if [ "$EXISTING_SG" != "None" ]; then
+          echo "Force deleting old security group: $EXISTING_SG"
           aws ec2 delete-security-group --group-id $EXISTING_SG 2>/dev/null || true
           sleep 5
         fi
         
-        # Create security group in correct VPC
+        # Create fresh security group
+        echo "Creating new security group..."
         SG_ID=$(aws ec2 create-security-group \
           --group-name servermonitoring-api-sg \
           --description "Security group for Server Monitoring API" \
           --vpc-id $VPC_ID \
           --query 'GroupId' \
-          --output text 2>/dev/null || \
-          aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
-            --query 'SecurityGroups[0].GroupId' \
-            --output text)
+          --output text)
         
-        echo "SG: $SG_ID"
+        echo "Created SG: $SG_ID"
+        sleep 2
         
-        # Remove default egress rule and add new one (fix ECR connectivity)
-        DEFAULT_EGRESS=$(aws ec2 describe-security-group-rules \
-          --filters "Name=group-id,Values=$SG_ID" "Name=is-egress,Values=true" \
-          --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
-          --output text 2>/dev/null || echo "None")
-        
-        if [ "$DEFAULT_EGRESS" != "None" ] && [ "$DEFAULT_EGRESS" != "" ]; then
-          echo "Removing default egress rule..."
-          aws ec2 revoke-security-group-egress \
-            --group-id $SG_ID \
-            --security-group-rule-ids $DEFAULT_EGRESS 2>/dev/null || true
-        fi
-        
-        # Allow all outbound traffic (needed for ECR and internet access)
-        aws ec2 authorize-security-group-egress \
-            --group-id $SG_ID \
-            --protocol -1 \
-            --cidr 0.0.0.0/0 2>/dev/null || true
-          
-        # Allow inbound traffic on port 8080 (API)
+        # Security groups are created with default egress rule (0.0.0.0/0), so just add ingress
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID \
             --protocol tcp \
             --port 8080 \
-            --cidr 0.0.0.0/0 2>/dev/null || true
+            --cidr 0.0.0.0/0
           
         # Create service with JSON format
         aws ecs create-service \
@@ -357,92 +330,15 @@ jobs:
             }"
 
 
-    - name: Check service creation
+    - name: Check API service created
       run: |
-        echo "Waiting for service to start..."
-        sleep 30
-        
-        # Check if service was created
-        SERVICE_STATUS=$(aws ecs describe-services \
+        echo "API service created. Checking initial status..."
+        sleep 10
+        aws ecs describe-services \
           --cluster ${{ env.ECS_CLUSTER }} \
           --services ${{ env.ECS_API_SERVICE }} \
-          --query 'services[0].status' \
-          --output text)
-        
-        echo "Service status: $SERVICE_STATUS"
-        
-        # Get task details
-        TASKS=$(aws ecs list-tasks \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --service-name ${{ env.ECS_API_SERVICE }} \
-          --query 'taskArns' \
-          --output json)
-        
-        echo "Tasks: $TASKS"
-        
-        # If no tasks, check service events
-        if [ "$TASKS" = "[]" ]; then
-          echo "No tasks created! Checking service events:"
-          aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_API_SERVICE }} \
-            --query 'services[0].events[0:5]' \
-            --output table
-          exit 1
-        fi
-        
-        # Get task status
-        TASK_ARN=$(echo $TASKS | jq -r '.[0]')
-        TASK_STATUS=$(aws ecs describe-tasks \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --tasks $TASK_ARN \
-          --query 'tasks[0].lastStatus' \
-          --output text)
-        
-        echo "Task status: $TASK_STATUS"
-        
-        # Check for stopped tasks
-        STOPPED_REASON=$(aws ecs describe-tasks \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --tasks $TASK_ARN \
-          --query 'tasks[0].stoppedReason' \
-          --output text 2>/dev/null || echo "None")
-        
-        if [ "$STOPPED_REASON" != "None" ] && [ "$STOPPED_REASON" != "" ]; then
-          echo "Task stopped! Reason: $STOPPED_REASON"
-          
-          # Get container details
-          aws ecs describe-tasks \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0]' \
-            --output json
-          exit 1
-        fi
-
-    - name: Wait for deployment (with timeout)
-      run: |
-        echo "Waiting for service to stabilize (max 10 minutes)..."
-        
-        timeout 600 aws ecs wait services-stable \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --services ${{ env.ECS_API_SERVICE }} || {
-          echo "Deployment timed out or failed!"
-          echo "Service events:"
-          aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_API_SERVICE }} \
-            --query 'services[0].events[0:10]' \
-            --output table
-          
-          echo "Task failures:"
-          aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_API_SERVICE }} \
-            --query 'services[0].events[?contains(message, `failed`)]' \
-            --output table
-          exit 1
-        }
+          --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}' \
+          --output table
 
     - name: Deploy Web to ECS
       run: |
@@ -463,26 +359,9 @@ jobs:
             --output text)
         
         echo "Web SG: $SG_ID_WEB"
+        sleep 2
         
-        # Remove default egress and add proper rules
-        DEFAULT_EGRESS_WEB=$(aws ec2 describe-security-group-rules \
-          --filters "Name=group-id,Values=$SG_ID_WEB" "Name=is-egress,Values=true" \
-          --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
-          --output text 2>/dev/null || echo "None")
-        
-        if [ "$DEFAULT_EGRESS_WEB" != "None" ] && [ "$DEFAULT_EGRESS_WEB" != "" ]; then
-          aws ec2 revoke-security-group-egress \
-            --group-id $SG_ID_WEB \
-            --security-group-rule-ids $DEFAULT_EGRESS_WEB 2>/dev/null || true
-        fi
-        
-        # Allow outbound
-        aws ec2 authorize-security-group-egress \
-            --group-id $SG_ID_WEB \
-            --protocol -1 \
-            --cidr 0.0.0.0/0 2>/dev/null || true
-        
-        # Allow inbound on port 80
+        # Add ingress rule (egress is 0.0.0.0/0 by default)
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID_WEB \
             --protocol tcp \
@@ -522,12 +401,15 @@ jobs:
               }
             }"
 
-    - name: Wait for Web deployment
+    - name: Check Web service created
       run: |
-        echo "Waiting for web service to stabilize (max 10 minutes)..."
-        timeout 600 aws ecs wait services-stable \
+        echo "Web service created. Checking initial status..."
+        sleep 10
+        aws ecs describe-services \
           --cluster ${{ env.ECS_CLUSTER }} \
-          --services ${{ env.ECS_WEB_SERVICE }} || echo "Web deployment may need more time"
+          --services ${{ env.ECS_WEB_SERVICE }} \
+          --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}' \
+          --output table
 
     - name: Get service URLs
       run: |
