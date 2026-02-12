@@ -38,7 +38,7 @@ jobs:
     
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
         path: tests/ServerMonitoring.UnitTests/TestResults/unit-test-results.trx
@@ -65,7 +65,7 @@ jobs:
     
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: integration-test-results
         path: tests/ServerMonitoring.IntegrationTests/TestResults/integration-test-results.trx
@@ -96,7 +96,7 @@ jobs:
     
     - name: Upload coverage
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: frontend-coverage
         path: ServerMonitoring.Web/coverage
