@@ -90,12 +90,16 @@ const DashboardPage = () => {
 
   // Memoized chart data calculation
   const chartData = useMemo(() => {
-    return metrics.map((m) => ({
-      time: format(new Date(m.timestamp), 'HH:mm:ss'),
-      CPU: m.cpuUsage,
-      Memory: m.memoryUsage,
-      Disk: m.diskUsage,
-    }))
+    return metrics.map((m) => {
+      const date = new Date(m.recordedAt)
+      const time = isNaN(date.getTime()) ? 'N/A' : format(date, 'HH:mm:ss')
+      return {
+        time,
+        CPU: m.cpuUsage,
+        Memory: m.memoryUsage,
+        Disk: m.diskUsage,
+      }
+    })
   }, [metrics])
 
   if (loading) {
@@ -242,7 +246,10 @@ const DashboardPage = () => {
                         <Typography variant="body2">{alert.title}</Typography>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {alert.serverName} • {format(new Date(alert.createdAt), 'PPpp')}
+                        {alert.serverName} • {(() => {
+                          const date = new Date(alert.createdAt)
+                          return isNaN(date.getTime()) ? 'Unknown time' : format(date, 'PPpp')
+                        })()}
                       </Typography>
                     </Box>
                   ))}

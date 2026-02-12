@@ -21,7 +21,7 @@ export interface Metric {
   networkInbound: number
   networkOutbound: number
   responseTime: number
-  timestamp: string
+  recordedAt: string
 }
 
 export const serverService = {
