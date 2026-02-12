@@ -1,0 +1,417 @@
+name: Deploy to AWS ECS Fargate
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      image_tag:
+        description: 'Docker image tag'
+        required: false
+        default: 'latest'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  API_REPOSITORY: servermonitoring-api
+  WEB_REPOSITORY: servermonitoring-web
+
+jobs:
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      image-tag: ${{ steps.set-tag.outputs.tag }}
+    steps:
+      - name: Determine Environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/develop" ]; then
+            echo "environment=development" >> $GITHUB_OUTPUT
+          else
+            echo "environment=development" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine Image Tag
+        id: set-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: determine-environment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ServerMonitoring.Web/package-lock.json
+
+      - name: Restore .NET dependencies
+        run: dotnet restore ServerMonitoring.sln
+
+      - name: Build .NET solution
+        run: dotnet build ServerMonitoring.sln --configuration Release --no-restore
+
+      - name: Run .NET tests
+        run: dotnet test ServerMonitoring.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Install frontend dependencies
+        working-directory: ServerMonitoring.Web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ServerMonitoring.Web
+        run: npm run build
+
+      - name: Run frontend tests
+        working-directory: ServerMonitoring.Web
+        run: npm test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/TestResults/**/*.trx
+            **/TestResults/**/*.xml
+
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    needs: [determine-environment, build-and-test]
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      api-image: ${{ steps.build-api.outputs.image }}
+      web-image: ${{ steps.build-web.outputs.image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR repositories if they don't exist
+        run: |
+          # Create API repository
+          aws ecr describe-repositories --repository-names ${{ env.API_REPOSITORY }} --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name ${{ env.API_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+
+          # Create Web repository
+          aws ecr describe-repositories --repository-names ${{ env.WEB_REPOSITORY }} --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name ${{ env.WEB_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+
+      - name: Build and push API Docker image
+        id: build-api
+        env:
+          IMAGE_TAG: ${{ needs.determine-environment.outputs.image-tag }}
+        run: |
+          API_IMAGE_URI="${{ env.ECR_REGISTRY }}/${{ env.API_REPOSITORY }}:${IMAGE_TAG}"
+          API_IMAGE_URI_LATEST="${{ env.ECR_REGISTRY }}/${{ env.API_REPOSITORY }}:latest"
+          
+          docker build \
+            -t $API_IMAGE_URI \
+            -t $API_IMAGE_URI_LATEST \
+            -f src/Presentation/ServerMonitoring.API/Dockerfile \
+            .
+          
+          docker push $API_IMAGE_URI
+          docker push $API_IMAGE_URI_LATEST
+          
+          echo "image=$API_IMAGE_URI" >> $GITHUB_OUTPUT
+
+      - name: Build and push Web Docker image
+        id: build-web
+        env:
+          IMAGE_TAG: ${{ needs.determine-environment.outputs.image-tag }}
+        run: |
+          WEB_IMAGE_URI="${{ env.ECR_REGISTRY }}/${{ env.WEB_REPOSITORY }}:${IMAGE_TAG}"
+          WEB_IMAGE_URI_LATEST="${{ env.ECR_REGISTRY }}/${{ env.WEB_REPOSITORY }}:latest"
+          
+          docker build \
+            -t $WEB_IMAGE_URI \
+            -t $WEB_IMAGE_URI_LATEST \
+            -f ServerMonitoring.Web/Dockerfile \
+            ./ServerMonitoring.Web
+          
+          docker push $WEB_IMAGE_URI
+          docker push $WEB_IMAGE_URI_LATEST
+          
+          echo "image=$WEB_IMAGE_URI" >> $GITHUB_OUTPUT
+
+      - name: Scan API image for vulnerabilities
+        continue-on-error: true
+        run: |
+          aws ecr start-image-scan \
+            --repository-name ${{ env.API_REPOSITORY }} \
+            --image-id imageTag=${{ needs.determine-environment.outputs.image-tag }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Scan Web image for vulnerabilities
+        continue-on-error: true
+        run: |
+          aws ecr start-image-scan \
+            --repository-name ${{ env.WEB_REPOSITORY }} \
+            --image-id imageTag=${{ needs.determine-environment.outputs.image-tag }} \
+            --region ${{ env.AWS_REGION }}
+
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    needs: [determine-environment, build-and-push-images]
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy CloudFormation Stack
+        run: |
+          STACK_NAME="${{ needs.determine-environment.outputs.environment }}-servermonitoring-cluster"
+          
+          aws cloudformation deploy \
+            --template-file aws/cloudformation/ecs-cluster.yml \
+            --stack-name $STACK_NAME \
+            --parameter-overrides \
+              EnvironmentName=${{ needs.determine-environment.outputs.environment }} \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset
+
+      - name: Wait for stack to be ready
+        run: |
+          STACK_NAME="${{ needs.determine-environment.outputs.environment }}-servermonitoring-cluster"
+          aws cloudformation wait stack-create-complete --stack-name $STACK_NAME --region ${{ env.AWS_REGION }} || \
+          aws cloudformation wait stack-update-complete --stack-name $STACK_NAME --region ${{ env.AWS_REGION }}
+
+  deploy-services:
+    runs-on: ubuntu-latest
+    needs: [determine-environment, build-and-push-images, deploy-infrastructure]
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get stack outputs
+        id: stack-outputs
+        run: |
+          STACK_NAME="${{ needs.determine-environment.outputs.environment }}-servermonitoring-cluster"
+          
+          CLUSTER_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='ECSClusterName'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          ECS_SECURITY_GROUP=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='ECSSecurityGroupId'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          PRIVATE_SUBNET_1=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnet1Id'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          PRIVATE_SUBNET_2=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnet2Id'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          API_TARGET_GROUP=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='APITargetGroupArn'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          WEB_TARGET_GROUP=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='WebTargetGroupArn'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          TASK_EXECUTION_ROLE=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='ECSTaskExecutionRoleArn'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          TASK_ROLE=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='ECSTaskRoleArn'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          ALB_DNS=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='ALBDNSName'].OutputValue" --output text --region ${{ env.AWS_REGION }})
+          
+          echo "cluster-name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+          echo "ecs-security-group=$ECS_SECURITY_GROUP" >> $GITHUB_OUTPUT
+          echo "private-subnet-1=$PRIVATE_SUBNET_1" >> $GITHUB_OUTPUT
+          echo "private-subnet-2=$PRIVATE_SUBNET_2" >> $GITHUB_OUTPUT
+          echo "api-target-group=$API_TARGET_GROUP" >> $GITHUB_OUTPUT
+          echo "web-target-group=$WEB_TARGET_GROUP" >> $GITHUB_OUTPUT
+          echo "task-execution-role=$TASK_EXECUTION_ROLE" >> $GITHUB_OUTPUT
+          echo "task-role=$TASK_ROLE" >> $GITHUB_OUTPUT
+          echo "alb-dns=$ALB_DNS" >> $GITHUB_OUTPUT
+
+      - name: Register API task definition
+        id: api-task-def
+        run: |
+          TASK_DEF=$(cat aws/ecs/api-task-definition.json | \
+            sed "s/\${AWS_ACCOUNT_ID}/${{ secrets.AWS_ACCOUNT_ID }}/g" | \
+            sed "s/\${AWS_REGION}/${{ env.AWS_REGION }}/g" | \
+            sed "s/\${ENVIRONMENT}/${{ needs.determine-environment.outputs.environment }}/g" | \
+            sed "s/\${IMAGE_TAG}/${{ needs.determine-environment.outputs.image-tag }}/g" | \
+            sed "s|\${ECS_TASK_EXECUTION_ROLE_ARN}|${{ steps.stack-outputs.outputs.task-execution-role }}|g" | \
+            sed "s|\${ECS_TASK_ROLE_ARN}|${{ steps.stack-outputs.outputs.task-role }}|g")
+          
+          TASK_DEF_ARN=$(echo "$TASK_DEF" | aws ecs register-task-definition --cli-input-json file:///dev/stdin --region ${{ env.AWS_REGION }} --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Register Web task definition
+        id: web-task-def
+        run: |
+          TASK_DEF=$(cat aws/ecs/web-task-definition.json | \
+            sed "s/\${AWS_ACCOUNT_ID}/${{ secrets.AWS_ACCOUNT_ID }}/g" | \
+            sed "s/\${AWS_REGION}/${{ env.AWS_REGION }}/g" | \
+            sed "s/\${ENVIRONMENT}/${{ needs.determine-environment.outputs.environment }}/g" | \
+            sed "s/\${IMAGE_TAG}/${{ needs.determine-environment.outputs.image-tag }}/g" | \
+            sed "s|\${ECS_TASK_EXECUTION_ROLE_ARN}|${{ steps.stack-outputs.outputs.task-execution-role }}|g" | \
+            sed "s|\${ECS_TASK_ROLE_ARN}|${{ steps.stack-outputs.outputs.task-role }}|g" | \
+            sed "s|\${API_URL}|http://${{ steps.stack-outputs.outputs.alb-dns }}|g")
+          
+          TASK_DEF_ARN=$(echo "$TASK_DEF" | aws ecs register-task-definition --cli-input-json file:///dev/stdin --region ${{ env.AWS_REGION }} --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Deploy API service
+        run: |
+          SERVICE_NAME="servermonitoring-api-service"
+          
+          # Check if service exists
+          SERVICE_EXISTS=$(aws ecs describe-services \
+            --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+            --services $SERVICE_NAME \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [ "$SERVICE_EXISTS" == "ACTIVE" ]; then
+            # Update existing service
+            aws ecs update-service \
+              --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+              --service $SERVICE_NAME \
+              --task-definition ${{ steps.api-task-def.outputs.arn }} \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }}
+          else
+            # Create new service
+            aws ecs create-service \
+              --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+              --service-name $SERVICE_NAME \
+              --task-definition ${{ steps.api-task-def.outputs.arn }} \
+              --desired-count 2 \
+              --launch-type FARGATE \
+              --platform-version LATEST \
+              --network-configuration "awsvpcConfiguration={subnets=[${{ steps.stack-outputs.outputs.private-subnet-1 }},${{ steps.stack-outputs.outputs.private-subnet-2 }}],securityGroups=[${{ steps.stack-outputs.outputs.ecs-security-group }}],assignPublicIp=DISABLED}" \
+              --load-balancers "targetGroupArn=${{ steps.stack-outputs.outputs.api-target-group }},containerName=$SERVICE_NAME,containerPort=8080" \
+              --health-check-grace-period-seconds 60 \
+              --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}" \
+              --enable-ecs-managed-tags \
+              --propagate-tags SERVICE \
+              --region ${{ env.AWS_REGION }}
+          fi
+
+      - name: Deploy Web service
+        run: |
+          SERVICE_NAME="servermonitoring-web-service"
+          
+          # Check if service exists
+          SERVICE_EXISTS=$(aws ecs describe-services \
+            --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+            --services $SERVICE_NAME \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [ "$SERVICE_EXISTS" == "ACTIVE" ]; then
+            # Update existing service
+            aws ecs update-service \
+              --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+              --service $SERVICE_NAME \
+              --task-definition ${{ steps.web-task-def.outputs.arn }} \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }}
+          else
+            # Create new service
+            aws ecs create-service \
+              --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+              --service-name $SERVICE_NAME \
+              --task-definition ${{ steps.web-task-def.outputs.arn }} \
+              --desired-count 2 \
+              --launch-type FARGATE \
+              --platform-version LATEST \
+              --network-configuration "awsvpcConfiguration={subnets=[${{ steps.stack-outputs.outputs.private-subnet-1 }},${{ steps.stack-outputs.outputs.private-subnet-2 }}],securityGroups=[${{ steps.stack-outputs.outputs.ecs-security-group }}],assignPublicIp=DISABLED}" \
+              --load-balancers "targetGroupArn=${{ steps.stack-outputs.outputs.web-target-group }},containerName=$SERVICE_NAME,containerPort=80" \
+              --health-check-grace-period-seconds 30 \
+              --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}" \
+              --enable-ecs-managed-tags \
+              --propagate-tags SERVICE \
+              --region ${{ env.AWS_REGION }}
+          fi
+
+      - name: Wait for services to be stable
+        run: |
+          echo "Waiting for API service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+            --services servermonitoring-api-service \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Waiting for Web service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster ${{ steps.stack-outputs.outputs.cluster-name }} \
+            --services servermonitoring-web-service \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deployment Summary
+        run: |
+          echo "========================================" 
+          echo "✓ Deployment Completed Successfully!"
+          echo "========================================"
+          echo ""
+          echo "Application URL: http://${{ steps.stack-outputs.outputs.alb-dns }}"
+          echo "API URL: http://${{ steps.stack-outputs.outputs.alb-dns }}/api"
+          echo "Swagger: http://${{ steps.stack-outputs.outputs.alb-dns }}/swagger"
+          echo "Hangfire: http://${{ steps.stack-outputs.outputs.alb-dns }}/hangfire"
+          echo ""
+          echo "Environment: ${{ needs.determine-environment.outputs.environment }}"
+          echo "Image Tag: ${{ needs.determine-environment.outputs.image-tag }}"
+          echo "Cluster: ${{ steps.stack-outputs.outputs.cluster-name }}"
+          echo "Region: ${{ env.AWS_REGION }}"

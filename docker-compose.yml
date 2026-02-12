@@ -1,0 +1,183 @@
+# =========================================
+# Server Monitoring - Docker Compose
+# =========================================
+# Best Practices Implemented:
+# - No version field (Compose v2 standard)
+# - Environment variables from .env file
+# - Resource limits for stability
+# - Restart policies for resilience
+# - Security hardening
+# - Health checks for all services
+# =========================================
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: servermonitoring-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: ${DB_SA_PASSWORD:-YourStrong@Passw0rd}
+      MSSQL_PID: Developer
+    ports:
+      - "${SQL_SERVER_PORT:-1433}:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - type: tmpfs
+        target: /var/opt/mssql/data
+        tmpfs:
+          size: 1G
+    networks:
+      - servermonitoring-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${SA_PASSWORD}" -Q "SELECT 1" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: servermonitoring-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --requirepass ${REDIS_PASSWORD:-YourRedis@Password}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - servermonitoring-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "$${REDIS_PASSWORD:-YourRedis@Password}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ASP.NET Core API
+  api:
+    build:
+      context: .
+      dockerfile: src/Presentation/ServerMonitoring.API/Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - servermonitoring-api:latest
+    image: servermonitoring-api:latest
+    container_name: servermonitoring-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+      ConnectionStrings__DefaultConnection: "Server=${SQL_SERVER_HOST:-sqlserver},${SQL_SERVER_PORT:-1433};Database=${SQL_DATABASE_NAME:-ServerMonitoringDb};User Id=sa;Password=${DB_SA_PASSWORD:-YourStrong@Passw0rd};TrustServerCertificate=true;MultipleActiveResultSets=true"
+      ConnectionStrings__RedisConnection: "${REDIS_HOST:-redis}:${REDIS_PORT:-6379},password=${REDIS_PASSWORD:-YourRedis@Password},abortConnect=false,connectTimeout=5000,syncTimeout=5000"
+      CacheSettings__UseRedis: ${CACHE_USE_REDIS:-true}
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:-YourSuperSecretKeyForJWT_MustBeAtLeast32Characters_ChangeInProduction!}
+      JwtSettings__Issuer: ${JWT_ISSUER:-ServerMonitoringAPI}
+      JwtSettings__Audience: ${JWT_AUDIENCE:-ServerMonitoringClient}
+    ports:
+      - "${API_PORT:-5000}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - servermonitoring-network
+    volumes:
+      - api_logs:/app/Logs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # React Frontend
+  web:
+    build:
+      context: ./ServerMonitoring.Web
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - servermonitoring-web:latest
+    image: servermonitoring-web:latest
+    container_name: servermonitoring-web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - servermonitoring-network
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+# =========================================
+# Networks
+# =========================================
+networks:
+  servermonitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =========================================
+# Volumes (Data Persistence)
+# =========================================
+volumes:
+  sqlserver_data:
+    driver: local
+  redis_data:
+    driver: local
+  api_logs:
+    driver: local

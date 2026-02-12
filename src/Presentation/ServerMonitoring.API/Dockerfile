@@ -1,0 +1,36 @@
+# ================================
+# Build Stage
+# ================================
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+
+WORKDIR /src
+
+# Copy everything
+COPY . .
+
+# Restore, build, and publish in one go (most reliable)
+RUN dotnet publish "src/Presentation/ServerMonitoring.API/ServerMonitoring.API.csproj" \
+    -c Release \
+    -o /app/publish \
+    /p:UseAppHost=false
+
+# ================================
+# Runtime Stage
+# ================================
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS publish
+
+WORKDIR /app
+
+# Create non-root user
+RUN groupadd -r -g 1001 appuser && useradd -r -g appuser -u 1001 appuser
+
+# Copy from build stage
+COPY --from=build --chown=appuser:appuser /app/publish .
+
+USER appuser
+
+EXPOSE 8080
+
+ENV ASPNETCORE_URLS=http://+:8080
+
+ENTRYPOINT ["dotnet", "ServerMonitoring.API.dll"]

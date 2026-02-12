@@ -1,0 +1,50 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'servermonitoring-swarm'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Docker Swarm service discovery
+  - job_name: 'docker-swarm'
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: tasks
+    relabel_configs:
+      - source_labels: [__meta_dockerswarm_service_name]
+        target_label: service
+
+  # API service metrics
+  - job_name: 'api'
+    static_configs:
+      - targets: ['api:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Traefik metrics
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+    metrics_path: '/metrics'
+
+  # Redis metrics (if redis_exporter is added)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  # Node exporter (if added)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

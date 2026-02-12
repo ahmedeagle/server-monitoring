@@ -1,0 +1,130 @@
+# =========================================
+# Server Monitoring - Root .gitignore
+# =========================================
+
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+!.env.production
+
+# Note: .env.production is a template, actual production .env should not be committed
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# IDE and Editors
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.user
+*.userosscache
+*.suo
+
+# Logs
+logs/
+*.log
+Logs/
+
+# Build outputs
+bin/
+obj/
+out/
+dist/
+build/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+**/Properties/launchSettings.json
+*.dbmdl
+*.jfm
+TestResults/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+.npm/
+.yarn/
+.cache/
+
+# Coverage reports
+coverage/
+*.coverage
+*.coveragexml
+.nyc_output/
+
+# Database files (local)
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# Backup files
+*.bak
+*.backup
+
+# Temporary files
+temp/
+tmp/
+.temp/
+.tmp/
+*.tmp
+
+# OS specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Certificates (NEVER commit!)
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+
+# Secrets (NEVER commit!)
+secrets/
+secrets-*.txt
+*.secret
+appsettings.Development.json
+appsettings.Production.json
+trust-policy.json
+
+# Docker volumes data (if mounted locally)
+data/
+volumes/
+
+# Package manager lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# TypeScript
+*.tsbuildinfo
+
+# AWS CLI outputs
+aws-outputs/

@@ -1,0 +1,49 @@
+{
+  "family": "servermonitoring-web",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "${ECS_TASK_EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${ECS_TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "servermonitoring-web",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/servermonitoring-web:${IMAGE_TAG}",
+      "cpu": 512,
+      "memory": 1024,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "VITE_API_URL",
+          "value": "${API_URL}"
+        },
+        {
+          "name": "VITE_SIGNALR_HUB_URL",
+          "value": "${API_URL}/hubs/monitoring"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/${ENVIRONMENT}/servermonitoring-web",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      }
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+# .NET
+**/bin/
+**/obj/
+**/out/
+**/.vs/
+**/.vscode/
+**/*.user
+**/*.userosscache
+**/*.suo
+**/.DS_Store
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Node
+**/node_modules/
+**/npm-debug.log
+**/yarn-error.log
+**/.npm
+**/.yarn
+
+# Logs
+**/Logs/
+**/*.log
+
+# Environment files
+**/.env
+**/.env.local
+**/.env.*.local
+
+# IDE
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+**/*~
+
+# Git
+**/.git/
+**/.gitignore
+**/.gitattributes
+
+# Docker
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+
+# Documentation
+**/README.md
+**/docs/
+**/*.md
+
+# Tests
+**/tests/
+**/*Tests/
+**/*.Tests/
+
+# Database
+**/*.db
+**/*.sqlite

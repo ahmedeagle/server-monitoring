@@ -1,0 +1,38 @@
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using ServerMonitoring.Application.DTOs;
+
+namespace ServerMonitoring.API.Controllers.V1;
+
+[Authorize]
+[ApiController]
+[Route("api/v1/[controller]")]
+public class MetricsController : ControllerBase
+{
+    private readonly IMediator _mediator;
+    private readonly ILogger<MetricsController> _logger;
+
+    public MetricsController(IMediator mediator, ILogger<MetricsController> logger)
+    {
+        _mediator = mediator;
+        _logger = logger;
+    }
+
+    [HttpGet("server/{serverId}")]
+    public async Task<ActionResult<List<MetricDto>>> GetServerMetrics(int serverId, [FromQuery] int limit = 100)
+    {
+        _logger.LogInformation("Getting metrics for server {ServerId}", serverId);
+        // TODO: Implement GetServerMetricsQuery
+        return Ok(new List<MetricDto>());
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<MetricDto>> Create([FromBody] CreateMetricDto dto)
+    {
+        _logger.LogInformation("Creating new metric for server {ServerId}", dto.ServerId);
+        // TODO: Implement CreateMetricCommand
+        return CreatedAtAction(nameof(GetServerMetrics), new { serverId = dto.ServerId }, new MetricDto());
+    }
+}
