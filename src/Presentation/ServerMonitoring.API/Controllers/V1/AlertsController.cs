@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ServerMonitoring.Application.DTOs;
+using ServerMonitoring.Application.Features.Alerts.Queries;
+using ServerMonitoring.Application.Features.Alerts.Commands;
 
 namespace ServerMonitoring.API.Controllers.V1;
 
@@ -23,16 +25,32 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult<List<AlertDto>>> GetAll([FromQuery] bool unacknowledgedOnly = false)
     {
         _logger.LogInformation("Getting alerts (unacknowledged only: {UnacknowledgedOnly})", unacknowledgedOnly);
-        // TODO: Implement GetAlertsQuery
-        return Ok(new List<AlertDto>());
+        var query = new GetAlertsQuery { UnacknowledgedOnly = unacknowledgedOnly };
+        var result = await _mediator.Send(query);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Error);
+        }
+        
+        return Ok(result.Data);
     }
 
     [HttpGet("server/{serverId}")]
     public async Task<ActionResult<List<AlertDto>>> GetServerAlerts(int serverId)
     {
         _logger.LogInformation("Getting alerts for server {ServerId}", serverId);
-        // TODO: Implement GetServerAlertsQuery
-        return Ok(new List<AlertDto>());
+        var query = new GetAlertsQuery { UnacknowledgedOnly = false };
+        var result = await _mediator.Send(query);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Error);
+        }
+        
+        // Filter by serverId
+        var serverAlerts = result.Data?.Where(a => a.ServerId == serverId).ToList() ?? new List<AlertDto>();
+        return Ok(serverAlerts);
     }
 
     [HttpPost("{id}/acknowledge")]
@@ -40,7 +58,14 @@ public class AlertsController : ControllerBase
     public async Task<IActionResult> Acknowledge(int id)
     {
         _logger.LogInformation("Acknowledging alert {AlertId}", id);
-        // TODO: Implement AcknowledgeAlertCommand
+        var command = new AcknowledgeAlertCommand { Id = id };
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Error);
+        }
+        
         return NoContent();
     }
 
@@ -49,7 +74,14 @@ public class AlertsController : ControllerBase
     public async Task<IActionResult> Resolve(int id)
     {
         _logger.LogInformation("Resolving alert {AlertId}", id);
-        // TODO: Implement ResolveAlertCommand
+        var command = new ResolveAlertCommand { Id = id };
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Error);
+        }
+        
         return NoContent();
     }
 }

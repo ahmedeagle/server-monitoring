@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ServerMonitoring.Application.DTOs;
+using ServerMonitoring.Application.Features.Metrics.Queries;
 
 namespace ServerMonitoring.API.Controllers.V1;
 
@@ -23,8 +24,15 @@ public class MetricsController : ControllerBase
     public async Task<ActionResult<List<MetricDto>>> GetServerMetrics(int serverId, [FromQuery] int limit = 100)
     {
         _logger.LogInformation("Getting metrics for server {ServerId}", serverId);
-        // TODO: Implement GetServerMetricsQuery
-        return Ok(new List<MetricDto>());
+        var query = new GetServerMetricsQuery { ServerId = serverId, Limit = limit };
+        var result = await _mediator.Send(query);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Error);
+        }
+        
+        return Ok(result.Data);
     }
 
     [HttpPost]

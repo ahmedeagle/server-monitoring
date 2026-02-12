@@ -4,7 +4,7 @@ using ServerMonitoring.Application.Common;
 using ServerMonitoring.Application.DTOs;
 using ServerMonitoring.Application.Interfaces;
 
-namespace ServerMonitoring.Application.Features\Servers.Queries;
+namespace ServerMonitoring.Application.Features.Servers.Queries;
 
 public class GetAllServersQueryHandler : IRequestHandler<GetAllServersQuery, Result<List<ServerDto>>>
 {
