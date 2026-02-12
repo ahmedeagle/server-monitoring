@@ -43,8 +43,8 @@ builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =
     else
     {
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        options.UseSqlServer(connectionString);
-        Log.Information("Using SQL Server Database");
+        options.UseSqlite(connectionString);
+        Log.Information("Using SQLite Database: {ConnectionString}", connectionString);
     }
 });
 
