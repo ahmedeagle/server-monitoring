@@ -63,14 +63,18 @@ const ServerDetailsPage = () => {
     return <Typography>Server not found</Typography>
   }
 
-  const chartData = metrics.map((m) => ({
-    time: format(new Date(m.timestamp), 'HH:mm'),
-    CPU: m.cpuUsage,
-    Memory: m.memoryUsage,
-    Disk: m.diskUsage,
-    Network: (m.networkInbound + m.networkOutbound) / 2,
-    ResponseTime: m.responseTime,
-  }))
+  const chartData = metrics.map((m) => {
+    const date = new Date(m.recordedAt)
+    const time = isNaN(date.getTime()) ? 'N/A' : format(date, 'HH:mm')
+    return {
+      time,
+      CPU: m.cpuUsage,
+      Memory: m.memoryUsage,
+      Disk: m.diskUsage,
+      Network: (m.networkInbound + m.networkOutbound) / 2,
+      ResponseTime: m.responseTime,
+    }
+  })
 
   const latestMetric = metrics[metrics.length - 1]
 
