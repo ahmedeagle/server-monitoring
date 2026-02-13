@@ -1131,11 +1131,11 @@ jobs:
           aws elbv2 delete-rule --rule-arn $RULE_ARN 2>/dev/null || true
         done
         
-        # Create fresh rule with current target group ARN
+        # Create fresh rule with current target group ARN (single path-pattern with multiple values)
         aws elbv2 create-rule \
           --listener-arn $LISTENER_ARN \
           --priority 10 \
-          --conditions Field=path-pattern,Values='/api/*' Field=path-pattern,Values='/swagger*' Field=path-pattern,Values='/health' Field=path-pattern,Values='/hangfire*' \
+          --conditions Field=path-pattern,Values='/api/*','/swagger*','/health','/hangfire*' \
           --actions Type=forward,TargetGroupArn=$API_TG_ARN
         
         echo "✅ Routing rules updated with current target groups"
