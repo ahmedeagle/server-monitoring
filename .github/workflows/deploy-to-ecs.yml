@@ -742,6 +742,10 @@ jobs:
         
         echo "✅ API security group rules configured"
         
+        # Set SG_ID for VPC endpoints (must be set BEFORE creating endpoints!)
+        SG_ID=$API_SG_ID
+        echo "🔒 Security Group for VPC endpoints: $SG_ID"
+        
         # CRITICAL: Ensure Web -> API connectivity rule exists (even on updates!)
         echo "⚡ Ensuring Web -> API connectivity..."
         WEB_SG_ID=$(aws ec2 describe-security-groups \
@@ -884,10 +888,6 @@ jobs:
         else
           echo "✅ Internet gateway found: $IGW_ROUTE (VPC endpoints provide faster ECR access)"
         fi
-        
-        # Use the API_SG_ID we created/got earlier
-        SG_ID=$API_SG_ID
-        echo "Using API Security Group: $SG_ID"
         
         # Use ALB created in previous step
         echo "Using ALB from previous step..."
