@@ -761,16 +761,45 @@ jobs:
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
         if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
-          echo "Service exists, updating with new task definition..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_API_SERVICE }} \
-            --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 300
+          echo "Service exists - checking if it has load balancer configuration..."
           
-          echo "✅ Service updated successfully!"
-          exit 0
+          # Check if service has load balancer configured
+          LB_CONFIG=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].loadBalancers' --output json)
+          
+          if [ "$LB_CONFIG" = "[]" ] || [ "$LB_CONFIG" = "null" ]; then
+            echo "⚠️  Service exists WITHOUT load balancer config!"
+            echo "🔧 Deleting service to recreate with ALB integration..."
+            
+            # Scale down first
+            aws ecs update-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_API_SERVICE }} \
+              --desired-count 0
+            
+            sleep 10
+            
+            # Force delete
+            aws ecs delete-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_API_SERVICE }} \
+              --force
+            
+            echo "Waiting 30 seconds for service deletion..."
+            sleep 30
+            
+            echo "✅ Service deleted - will create new one with ALB"
+          else
+            echo "Service has load balancer config - updating..."
+            aws ecs update-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_API_SERVICE }} \
+              --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
+              --force-new-deployment \
+              --health-check-grace-period-seconds 300
+            
+            echo "✅ Service updated successfully!"
+            exit 0
+          fi
         fi
         
         echo "Creating new service..."
@@ -1181,18 +1210,51 @@ jobs:
         WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
         if [ "$WEB_SERVICE_EXISTS" = "ACTIVE" ]; then
-          echo "Web service exists, updating with new task definition..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_WEB_SERVICE }} \
-            --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 300
+          echo "Web service exists - checking if it has load balancer configuration..."
           
-          echo "✅ Web service updated successfully!"
-        else
-          # Create web service with ALB
-          echo "Creating web service..."
+          # Check if service has load balancer configured
+          LB_CONFIG=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].loadBalancers' --output json)
+          
+          if [ "$LB_CONFIG" = "[]" ] || [ "$LB_CONFIG" = "null" ]; then
+            echo "⚠️  Web service exists WITHOUT load balancer config!"
+            echo "🔧 Deleting service to recreate with ALB integration..."
+            
+            # Scale down first
+            aws ecs update-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_WEB_SERVICE }} \
+              --desired-count 0
+            
+            sleep 10
+            
+            # Force delete
+            aws ecs delete-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_WEB_SERVICE }} \
+              --force
+            
+            echo "Waiting 30 seconds for service deletion..."
+            sleep 30
+            
+            echo "✅ Service deleted - will create new one with ALB"
+            # Continue to creation below
+          else
+            echo "Web service has load balancer config - updating..."
+            aws ecs update-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service ${{ env.ECS_WEB_SERVICE }} \
+              --task-definition ${{ steps.web-task-def.outputs.TASK_DEF_ARN }} \
+              --force-new-deployment \
+              --health-check-grace-period-seconds 300
+            
+            echo "✅ Web service updated successfully!"
+            # Don't exit - let it fall through to ensure connectivity
+          fi
+        fi
+        
+        # Create web service with ALB if it doesn't exist or was deleted
+        if [ "$WEB_SERVICE_EXISTS" = "MISSING" ] || [ "$LB_CONFIG" = "[]" ] || [ "$LB_CONFIG" = "null" ]; then
+          echo "Creating web service with ALB integration..."
           aws ecs create-service \
               --cluster ${{ env.ECS_CLUSTER }} \
               --service-name ${{ env.ECS_WEB_SERVICE }} \
