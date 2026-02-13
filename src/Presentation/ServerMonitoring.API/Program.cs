@@ -275,7 +275,10 @@ app.UseAuthorization();
 // Hangfire Dashboard - accessible without authentication for demo
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    Authorization = new[] { new AllowAllDashboardAuthorizationFilter() }
+    Authorization = new[] { new AllowAllDashboardAuthorizationFilter() },
+    DashboardTitle = "Server Monitoring - Hangfire Dashboard",
+    AppPath = null, // Disable back button
+    StatsPollingInterval = 2000
 });
 
 app.MapHub<MonitoringHub>("/hubs/monitoring");
