@@ -129,23 +129,37 @@ public class ReportsController : ControllerBase
     /// <returns>Scheduled report ID</returns>
     [HttpPost("schedule")]
     [ProducesResponseType(typeof(object), StatusCodes.Status202Accepted)]
-    public IActionResult ScheduleReport([FromQuery] int serverId, [FromQuery] int delayMinutes = 60)
+    public async Task<IActionResult> ScheduleReport([FromQuery] int serverId, [FromQuery] int delayMinutes = 60)
     {
-        var reportId = Guid.NewGuid().ToString();
         var startDate = DateTime.UtcNow.AddDays(-30);
         var endDate = DateTime.UtcNow;
 
+        // Create report entity in database
+        var report = new Report
+        {
+            Title = $"Scheduled Report for Server {serverId}",
+            Description = $"Report scheduled for {DateTime.UtcNow.AddMinutes(delayMinutes):yyyy-MM-dd HH:mm}",
+            Type = ReportType.DailyMetrics,
+            Status = ReportStatus.Processing,
+            StartDate = startDate,
+            EndDate = endDate,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.Reports.AddAsync(report);
+        await _unitOfWork.SaveChangesAsync();
+
         // Schedule delayed job
         BackgroundJob.Schedule<ReportGenerationJob>(
-            job => job.GenerateReportAsync(serverId, startDate, endDate, reportId),
+            job => job.GenerateReportAsync(report.Id, serverId, startDate, endDate),
             TimeSpan.FromMinutes(delayMinutes));
 
-        _logger.LogInformation("Report generation scheduled in {Delay} minutes. Server: {ServerId}, Report: {ReportId}", 
-            delayMinutes, serverId, reportId);
+        _logger.LogInformation("Report generation scheduled in {Delay} minutes. Server: {ServerId}, ReportId: {ReportId}", 
+            delayMinutes, serverId, report.Id);
 
         return Accepted(new
         {
-            ReportId = reportId,
+            ReportId = report.Id,
             ServerId = serverId,
             ScheduledFor = DateTime.UtcNow.AddMinutes(delayMinutes),
             Status = "Scheduled"
