@@ -767,6 +767,7 @@ jobs:
         
         # Check if service exists
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+        CREATE_SERVICE="false"
         
         if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
           echo "Service exists - checking if it has load balancer configuration..."
@@ -796,6 +797,7 @@ jobs:
             sleep 30
             
             echo "✅ Service deleted - will create new one with ALB"
+            CREATE_SERVICE="true"
           else
             echo "Service has load balancer config - updating..."
             aws ecs update-service \
@@ -807,10 +809,15 @@ jobs:
             
             echo "✅ Service updated successfully!"
             echo "⏭️  Continuing to Web service deployment..."
+            CREATE_SERVICE="false"
           fi
+        else
+          echo "Service doesn't exist - will create new one"
+          CREATE_SERVICE="true"
         fi
         
-        echo "Creating new service..."
+        if [ "$CREATE_SERVICE" = "true" ]; then
+          echo "Creating new service..."
         
         # Check if subnets have internet gateway routes
         SUBNET_ID=$(echo $SUBNETS | jq -r '.[0]')
@@ -911,6 +918,11 @@ jobs:
                 \"assignPublicIp\": \"ENABLED\"
               }
             }"
+        
+        echo "✅ API service created with ALB integration"
+        else
+          echo "⏩ Skipping service creation - service already up-to-date"
+        fi
 
 
     - name: Check API service created
