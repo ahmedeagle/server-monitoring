@@ -158,4 +158,64 @@ public class ReportsController : ControllerBase
             EstimatedCompletion = DateTime.UtcNow.AddMinutes(2)
         });
     }
+
+    /// <summary>
+    /// Download a generated report
+    /// </summary>
+    /// <param name="reportId">Report ID to download</param>
+    [HttpGet("{reportId}/download")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DownloadReport(int reportId)
+    {
+        try
+        {
+            // Query report from database using MediatR
+            var result = await _mediator.Send(new GetAllReportsQuery());
+            
+            if (!result.IsSuccess || result.Data == null)
+            {
+                return NotFound(new { Error = "Report not found" });
+            }
+
+            var report = result.Data.FirstOrDefault(r => r.Id == reportId);
+            
+            if (report == null)
+            {
+                return NotFound(new { Error = $"Report with ID {reportId} not found" });
+            }
+
+            // Generate CSV content from report
+            var csvContent = GenerateReportCsv(report);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
+
+            _logger.LogInformation("Report {ReportId} downloaded", reportId);
+
+            return File(bytes, "text/csv", $"report_{reportId}_{DateTime.UtcNow:yyyyMMdd}.csv");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading report {ReportId}", reportId);
+            return StatusCode(500, new { Error = "Failed to download report" });
+        }
+    }
+
+    private string GenerateReportCsv(ReportDto report)
+    {
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("Report ID,Server ID,Type,Start Date,End Date,Status,Created At");
+        csv.AppendLine($"{report.Id},{report.ServerId},{report.Type},{report.StartDate:yyyy-MM-dd},{report.EndDate:yyyy-MM-dd},{report.Status},{report.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+        csv.AppendLine();
+        csv.AppendLine("Metric,Value");
+        
+        // Add metrics if available
+        if (report.Data != null)
+        {
+            csv.AppendLine($"CPU Usage,{report.Data.GetValueOrDefault("CpuUsage", "N/A")}");
+            csv.AppendLine($"Memory Usage,{report.Data.GetValueOrDefault("MemoryUsage", "N/A")}");
+            csv.AppendLine($"Disk Usage,{report.Data.GetValueOrDefault("DiskUsage", "N/A")}");
+        }
+        
+        return csv.ToString();
+    }
 }
