@@ -1,7 +1,7 @@
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Dashboard;
-using Hangfire.InMemory;
+using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
@@ -168,10 +168,7 @@ builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseInMemoryStorage(new Hangfire.InMemory.InMemoryStorageOptions
-    {
-        MaxExpirationTime = TimeSpan.FromHours(24)
-    }));
+    .UseMemoryStorage());
 
 builder.Services.AddHangfireServer(options =>
 {
