@@ -345,27 +345,30 @@ jobs:
       run: |
         echo "🔧 Setting up Application Load Balancer..."
         
-        # Get network info - select subnets from different AZs (ALB requirement)
-        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
-        echo "VPC ID: $VPC_ID"
+        # Get ALL available subnets (ALB requires at least 2 in different AZs)
+        echo "Fetching available subnets..."
+        ALL_SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output text)
+        SUBNET_ARRAY=($ALL_SUBNETS)
+        SUBNET_COUNT=${#SUBNET_ARRAY[@]}
         
-        # Get subnets from at least 2 different AZs
-        SUBNET1=$(aws ec2 describe-subnets \
-          --filters "Name=vpc-id,Values=$VPC_ID" \
-          --query 'Subnets[0].SubnetId' \
-          --output text)
-        SUBNET2=$(aws ec2 describe-subnets \
-          --filters "Name=vpc-id,Values=$VPC_ID" \
-          --query 'Subnets[1].SubnetId' \
-          --output text)
+        echo "Found $SUBNET_COUNT subnets: ${SUBNET_ARRAY[@]}"
         
-        echo "Subnet 1: $SUBNET1"
-        echo "Subnet 2: $SUBNET2"
-        
-        if [ -z "$SUBNET1" ] || [ -z "$SUBNET2" ]; then
-          echo "❌ Error: Could not find at least 2 subnets"
+        if [ $SUBNET_COUNT -lt 2 ]; then
+          echo "❌ Error: ALB requires at least 2 subnets in different availability zones"
+          echo "Found only $SUBNET_COUNT subnet(s). Please ensure your AWS account has multiple subnets available."
           exit 1
         fi
+        
+        # Use first 2 subnets for ALB
+        SUBNET1=${SUBNET_ARRAY[0]}
+        SUBNET2=${SUBNET_ARRAY[1]}
+        
+        echo "Using Subnet 1: $SUBNET1"
+        echo "Using Subnet 2: $SUBNET2"
+        
+        # Get VPC ID from first subnet
+        VPC_ID=$(aws ec2 describe-subnets --subnet-ids $SUBNET1 --query 'Subnets[0].VpcId' --output text)
+        echo "VPC ID: $VPC_ID"
         
         # Create ALB security group
         ALB_SG_ID=$(aws ec2 describe-security-groups \
