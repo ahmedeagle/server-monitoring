@@ -877,15 +877,15 @@ jobs:
         
         if [ "$CREATE_SERVICE" = "true" ]; then
           echo "Creating new API service with ALB integration..."
-        
-        # Use ALB created in previous step
-        echo "Using ALB from previous step..."
-        echo "ALB ARN: ${{ env.ALB_ARN }}"
-        echo "API Target Group: ${{ env.API_TG_ARN }}"
-        echo "API URL: ${{ env.API_URL }}"
           
-        # Create service with ALB target group
-        aws ecs create-service \
+          # Use ALB created in previous step
+          echo "Using ALB from previous step..."
+          echo "ALB ARN: ${{ env.ALB_ARN }}"
+          echo "API Target Group: ${{ env.API_TG_ARN }}"
+          echo "API URL: ${{ env.API_URL }}"
+          
+          # Create service with ALB target group
+          aws ecs create-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service-name ${{ env.ECS_API_SERVICE }} \
             --task-definition ${{ steps.api-task-def.outputs.TASK_DEF_ARN }} \
@@ -900,8 +900,8 @@ jobs:
                 \"assignPublicIp\": \"ENABLED\"
               }
             }"
-        
-        echo "✅ API service created with ALB integration"
+          
+          echo "✅ API service created with ALB integration"
         else
           echo "⏩ Skipping service creation - service already up-to-date"
         fi
@@ -1203,6 +1203,10 @@ jobs:
         
         # Check if web service exists
         WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+        LB_CONFIG=""
+        CREATE_WEB_SERVICE="false"
+        
+        echo "Web service status: $WEB_SERVICE_EXISTS"
         
         if [ "$WEB_SERVICE_EXISTS" = "ACTIVE" ]; then
           echo "Web service exists - checking if it has load balancer configuration..."
@@ -1232,7 +1236,7 @@ jobs:
             sleep 30
             
             echo "✅ Service deleted - will create new one with ALB"
-            # Continue to creation below
+            CREATE_WEB_SERVICE="true"
           else
             echo "Web service has load balancer config - updating..."
             aws ecs update-service \
@@ -1243,13 +1247,19 @@ jobs:
               --health-check-grace-period-seconds 300
             
             echo "✅ Web service updated successfully!"
-            # Don't exit - let it fall through to ensure connectivity
           fi
+        elif [ "$WEB_SERVICE_EXISTS" = "MISSING" ]; then
+          echo "Web service does NOT exist - will create new one"
+          CREATE_WEB_SERVICE="true"
         fi
         
-        # Create web service with ALB if it doesn't exist or was deleted
-        if [ "$WEB_SERVICE_EXISTS" = "MISSING" ] || [ "$WEB_SERVICE_EXISTS" = "ACTIVE" -a \( "$LB_CONFIG" = "[]" -o "$LB_CONFIG" = "null" \) ]; then
-          echo "Creating web service with ALB integration..."
+        # Create web service with ALB if needed
+        if [ "$CREATE_WEB_SERVICE" = "true" ]; then
+          echo "🚀 Creating web service with ALB integration..."
+          echo "Target Group: $WEB_TG_ARN"
+          echo "Security Group: $SG_ID_WEB"
+          echo "Subnets: $SUBNETS"
+          
           aws ecs create-service \
               --cluster ${{ env.ECS_CLUSTER }} \
               --service-name ${{ env.ECS_WEB_SERVICE }} \
@@ -1265,6 +1275,10 @@ jobs:
                   \"assignPublicIp\": \"ENABLED\"
                 }
               }"
+          
+          echo "✅ Web service created successfully!"
+        else
+          echo "⏩ Skipping Web service creation"
         fi
 
     - name: Ensure security group connectivity (critical fix)
