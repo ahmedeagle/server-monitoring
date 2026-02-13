@@ -488,7 +488,7 @@
             <h1>🎯 Server Monitoring System</h1>
             <p>Enterprise-Grade Full Stack Application with .NET & React</p>
             <div class="bonus-banner">
-                🏆 PRODUCTION-READY: ALB + AUTOMATED CI/CD + UNIT TESTS PIPELINE 🏆
+                🏆 BONUS: AWS ECS FARGATE DEPLOYMENT + GITHUB ACTIONS CI/CD ORCHESTRATION 🏆
             </div>
             <div class="badges">
                 <span class="badge">.NET 10.0</span>
@@ -497,76 +497,12 @@
                 <span class="badge">Clean Architecture</span>
                 <span class="badge">CQRS + MediatR</span>
                 <span class="badge">Docker Optimized</span>
-                <span class="badge bonus">⚡ ALB Load Balancer</span>
-                <span class="badge bonus">🚀 CI/CD + Tests</span>
-                <span class="badge bonus">☁️ ECS Fargate</span>
+                <span class="badge bonus">⚡ ECS Fargate</span>
+                <span class="badge bonus">🚀 GitHub Actions</span>
                 <span class="badge">Rate Limited</span>
                 <span class="badge">95 Tests ✓</span>
                 <span class="badge">65% Coverage ✓</span>
                 <span class="badge">Zero Errors ✓</span>
-            </div>
-        </div>
-
-        <!-- Production-Ready Highlights Banner -->
-        <div class="section" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 40px 60px; margin: 0;">
-            <h2 style="color: white; text-align: center; font-size: 2.5em; margin-bottom: 20px; border: none;">🎯 Production-Ready Architecture</h2>
-            <p style="text-align: center; font-size: 1.3em; opacity: 0.95; margin-bottom: 40px;">Enterprise-grade deployment with Application Load Balancer & automated CI/CD</p>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px;">
-                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                    <h3 style="font-size: 1.6em; margin-bottom: 15px; color: #fff;">⚡ Application Load Balancer</h3>
-                    <ul style="list-style: none; padding: 0; line-height: 2; font-size: 1.05em;">
-                        <li>✅ <strong>Stable DNS</strong> - URL never changes</li>
-                        <li>✅ <strong>Path Routing</strong> - /api/* → API, /* → Web</li>
-                        <li>✅ <strong>Health Checks</strong> - Auto target removal</li>
-                        <li>✅ <strong>Zero Downtime</strong> - Rolling deployments</li>
-                        <li>✅ <strong>SSL Ready</strong> - Easy HTTPS integration</li>
-                    </ul>
-                </div>
-                
-                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                    <h3 style="font-size: 1.6em; margin-bottom: 15px; color: #fff;">🚀 Automated CI/CD Pipeline</h3>
-                    <ul style="list-style: none; padding: 0; line-height: 2; font-size: 1.05em;">
-                        <li>✅ <strong>Unit Tests</strong> - Run on every push</li>
-                        <li>✅ <strong>Frontend Tests</strong> - Vitest + React Testing</li>
-                        <li>✅ <strong>Build Validation</strong> - Zero errors policy</li>
-                        <li>✅ <strong>Docker Build</strong> - Multi-stage optimized</li>
-                        <li>✅ <strong>Auto Deploy</strong> - ECS Fargate in 7min</li>
-                    </ul>
-                </div>
-                
-                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                    <h3 style="font-size: 1.6em; margin-bottom: 15px; color: #fff;">💎 Enterprise Features</h3>
-                    <ul style="list-style: none; padding: 0; line-height: 2; font-size: 1.05em;">
-                        <li>✅ <strong>Hangfire Dashboard</strong> - /hangfire monitoring</li>
-                        <li>✅ <strong>SignalR Hub</strong> - Real-time updates</li>
-                        <li>✅ <strong>Secrets Manager</strong> - No hardcoded keys</li>
-                        <li>✅ <strong>Security Groups</strong> - Persistent rules</li>
-                        <li>✅ <strong>VPC Endpoints</strong> - Private AWS network</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 35px; padding: 30px; background: rgba(0,0,0,0.2); border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                <h3 style="font-size: 1.5em; margin-bottom: 15px; color: #fff;">🌐 Live Demo URLs (After Deployment)</h3>
-                <p style="font-size: 1.1em; opacity: 0.95; margin-bottom: 20px;">Check <strong>CURRENT_DEPLOYMENT.md</strong> for the latest ALB DNS after GitHub Actions completes</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 20px;">
-                    <div style="padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
-                        <strong>Main App:</strong> http://[ALB-DNS]/
-                    </div>
-                    <div style="padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
-                        <strong>API Docs:</strong> http://[ALB-DNS]/swagger
-                    </div>
-                    <div style="padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
-                        <strong>Hangfire:</strong> http://[ALB-DNS]/hangfire
-                    </div>
-                    <div style="padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
-                        <strong>Health:</strong> http://[ALB-DNS]/health
-                    </div>
-                </div>
-                <p style="font-size: 0.95em; opacity: 0.85; margin-top: 20px;">
-                    <strong>Login:</strong> admin / Admin@123 | <strong>Note:</strong> DNS propagation takes ~2-3 minutes after deployment
-                </p>
             </div>
         </div>
 
@@ -598,16 +534,17 @@
                     <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin: 20px 0;">
                         <code style="font-size: 1.2em; color: #fff;">git push origin main</code>
                     </div>
-                    <p style="font-size: 1.1em; opacity: 0.95;">GitHub Actions → Build → Deploy → Live in 7 minutes!</p>
+                    <p style="font-size: 1.1em; opacity: 0.95;">GitHub Actions → Build → Deploy → Live in 3 minutes!</p>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.3);">
-                        <div style="margin: 10px 0;">✅ <strong>ALB</strong> - Stable DNS, zero downtime</div>
-                        <div style="margin: 10px 0;">✅ <strong>Tests in Pipeline</strong> - Unit + Frontend</div>
+                        <div style="margin: 10px 0;">✅ Application Load Balancer (stable DNS)</div>
                         <div style="margin: 10px 0;">✅ ECS Fargate orchestration</div>
                         <div style="margin: 10px 0;">✅ Auto-scaling & health checks</div>
                         <div style="margin: 10px 0;">✅ Secrets Manager integration</div>
                         <div style="margin: 10px 0;">✅ VPC endpoints (private AWS)</div>
+                        <div style="margin: 10px 0;">✅ IAM roles auto-created</div>
                         <div style="margin: 15px 0; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 5px;">
-                            <strong>Production-grade deployment</strong>
+                            <strong>🌐 Live URLs</strong><br>
+                            <span style="font-size: 0.9em;">Check GitHub Actions output for ALB DNS</span>
                         </div>
                     </div>
                 </div>
@@ -1118,9 +1055,11 @@
                     </p>
                     <div style="margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 10px;">
                         <p style="font-size: 1.3em; font-weight: bold; margin-bottom: 10px;">🌐 Live Deployment URLs</p>
-                        <p style="opacity: 0.9;">Web UI: http://&lt;PUBLIC_IP&gt;</p>
-                        <p style="opacity: 0.9;">API: http://&lt;PUBLIC_IP&gt;:8080/swagger</p>
-                        <p style="opacity: 0.9;">Health: http://&lt;PUBLIC_IP&gt;:8080/health</p>
+                        <p style="opacity: 0.9; margin: 8px 0;">Web UI: <strong style="color: #fbbf24;">http://servermonitoring-alb-XXXXXXXXX.us-east-1.elb.amazonaws.com</strong></p>
+                        <p style="opacity: 0.9; margin: 8px 0;">API/Swagger: <strong style="color: #fbbf24;">http://servermonitoring-alb-XXXXXXXXX.us-east-1.elb.amazonaws.com/api</strong></p>
+                        <p style="opacity: 0.9; margin: 8px 0;">Hangfire Dashboard: <strong style="color: #fbbf24;">http://servermonitoring-alb-XXXXXXXXX.us-east-1.elb.amazonaws.com/hangfire</strong></p>
+                        <p style="opacity: 0.9; margin: 8px 0;">Health Check: <strong style="color: #fbbf24;">http://servermonitoring-alb-XXXXXXXXX.us-east-1.elb.amazonaws.com/health</strong></p>
+                        <p style="font-size: 0.85em; opacity: 0.7; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">💡 Get actual ALB DNS from <strong>GitHub Actions</strong> workflow output ("Setup Application Load Balancer" step)</p>
                     </div>
                 </div>
             </div>
@@ -1447,8 +1386,10 @@
                     </div>
                     
                     <div class="feature-card" style="border-left-color: #78716c;">
-               style="font-size: 1.1em; margin: 15px 0;">Clean Architecture • SOLID Principles • Design Patterns • Enterprise Best Practices</p>
-            <p>Infrastructure as Code • AWS ECS • Docker Orchestration • Secure Config • CI/CD • Rate Limiting</p>
+                        <h3>Software Engineering Excellence</h3>
+                        <p style="font-size: 1.1em; margin: 15px 0;">Clean Architecture • SOLID Principles • Design Patterns • Enterprise Best Practices</p>
+                        <p>Infrastructure as Code • AWS ECS • Docker Orchestration • Secure Config • CI/CD • Rate Limiting</p>
+                    </div>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 30px auto; max-width: 1000px; text-align: center;">
                 <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;">
