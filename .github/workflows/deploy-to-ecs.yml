@@ -1169,12 +1169,12 @@ jobs:
         aws elbv2 create-rule \
           --listener-arn $LISTENER_ARN \
           --priority 10 \
-          --conditions Field=path-pattern,Values='/api/*','/swagger*','/health','/hangfire*' \
+          --conditions Field=path-pattern,Values='/api/*','/swagger*','/health','/hangfire*','/hubs/*' \
           --actions Type=forward,TargetGroupArn=$API_TG_ARN
         
         echo "✅ Routing rules updated with current target groups"
         
-        echo "✅ ALB routing configured: /api/* -> API, / -> Web"
+        echo "✅ ALB routing configured: /api/*, /hubs/* -> API, / -> Web"
         echo "WEB_TG_ARN=$WEB_TG_ARN" >> $GITHUB_ENV
 
     - name: Deploy Web to ECS
