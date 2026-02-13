@@ -3,6 +3,7 @@ using Hangfire;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ServerMonitoring.Application.DTOs;
 using ServerMonitoring.Application.Features.Reports.Queries;
 using ServerMonitoring.Infrastructure.BackgroundJobs;
 
