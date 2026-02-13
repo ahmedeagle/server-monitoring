@@ -692,8 +692,8 @@ jobs:
     - name: Deploy to ECS
       run: |
         # Get network info first (needed for both create and update)
-        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[*].SubnetId' --output json)
         echo "VPC: $VPC_ID"
         echo "Subnets: $SUBNETS"
         
@@ -786,7 +786,7 @@ jobs:
           --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.api \
           --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
           --security-group-ids $SG_ID \
-          --private-dns-enabled 2>/dev/null || echo "✅ ECR API endpoint exists"
+          --private-dns-enabled 2>/dev/null || echo "ECR API endpoint already exists"
         
         # Create VPC endpoint for ECR Docker
         aws ec2 create-vpc-endpoint \
@@ -795,7 +795,40 @@ jobs:
           --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.dkr \
           --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
           --security-group-ids $SG_ID \
-          --private-dns-enabled 2>/dev/null || echo "✅ ECR DKR endpoint exists"
+          --private-dns-enabled 2>/dev/null || echo "ECR DKR endpoint already exists"
+        
+        # Update existing VPC endpoints to ensure they have ALL subnets
+        echo "🔧 Ensuring VPC endpoints have all subnets..."
+        ECR_API_ENDPOINT=$(aws ec2 describe-vpc-endpoints \
+          --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=com.amazonaws.${{ env.AWS_REGION }}.ecr.api" \
+          --query 'VpcEndpoints[0].VpcEndpointId' --output text)
+        ECR_DKR_ENDPOINT=$(aws ec2 describe-vpc-endpoints \
+          --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=com.amazonaws.${{ env.AWS_REGION }}.ecr.dkr" \
+          --query 'VpcEndpoints[0].VpcEndpointId' --output text)
+        
+        if [ "$ECR_API_ENDPOINT" != "None" ] && [ -n "$ECR_API_ENDPOINT" ]; then
+          CURRENT_SUBNETS=$(aws ec2 describe-vpc-endpoints --vpc-endpoint-ids $ECR_API_ENDPOINT --query 'VpcEndpoints[0].SubnetIds' --output json)
+          ALL_SUBNET_IDS=$(echo $SUBNETS | jq -r '.[]')
+          for SUBNET in $ALL_SUBNET_IDS; do
+            if ! echo $CURRENT_SUBNETS | grep -q $SUBNET; then
+              echo "Adding subnet $SUBNET to ECR API endpoint"
+              aws ec2 modify-vpc-endpoint --vpc-endpoint-id $ECR_API_ENDPOINT --add-subnet-ids $SUBNET 2>/dev/null || true
+            fi
+          done
+          echo "✅ ECR API endpoint updated with all subnets"
+        fi
+        
+        if [ "$ECR_DKR_ENDPOINT" != "None" ] && [ -n "$ECR_DKR_ENDPOINT" ]; then
+          CURRENT_SUBNETS=$(aws ec2 describe-vpc-endpoints --vpc-endpoint-ids $ECR_DKR_ENDPOINT --query 'VpcEndpoints[0].SubnetIds' --output json)
+          ALL_SUBNET_IDS=$(echo $SUBNETS | jq -r '.[]')
+          for SUBNET in $ALL_SUBNET_IDS; do
+            if ! echo $CURRENT_SUBNETS | grep -q $SUBNET; then
+              echo "Adding subnet $SUBNET to ECR DKR endpoint"
+              aws ec2 modify-vpc-endpoint --vpc-endpoint-id $ECR_DKR_ENDPOINT --add-subnet-ids $SUBNET 2>/dev/null || true
+            fi
+          done
+          echo "✅ ECR DKR endpoint updated with all subnets"
+        fi
         
         # Create VPC endpoint for S3 (needed for ECR layers)
         aws ec2 create-vpc-endpoint \
@@ -1126,8 +1159,8 @@ jobs:
     - name: Deploy Web to ECS
       run: |
         # Get subnets and VPC (already created from API deployment)
-        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[*].SubnetId' --output json)
         
         # Get or create Web security group (REUSE existing, don't delete!)
         SG_ID_WEB=$(aws ec2 describe-security-groups \
