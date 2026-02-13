@@ -343,6 +343,58 @@ jobs:
 
     - name: Deploy to ECS
       run: |
+        # Get network info first (needed for both create and update)
+        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        echo "VPC: $VPC_ID"
+        echo "Subnets: $SUBNETS"
+        
+        if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
+          echo "ERROR: No subnets available!"
+          exit 1
+        fi
+        
+        # Get or create API security group (ALWAYS, even for updates)
+        API_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null)
+        
+        if [ "$API_SG_ID" = "None" ] || [ -z "$API_SG_ID" ]; then
+          echo "Creating API security group..."
+          API_SG_ID=$(aws ec2 create-security-group \
+            --group-name servermonitoring-api-sg \
+            --description "Security group for Server Monitoring API" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
+          sleep 2
+        else
+          echo "Using existing API security group: $API_SG_ID"
+        fi
+        
+        # Ensure security group rules exist (idempotent - won't fail if already exists)
+        echo "Ensuring API security group rules..."
+        aws ec2 authorize-security-group-egress \
+          --group-id $API_SG_ID \
+          --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule exists"
+        
+        aws ec2 authorize-security-group-ingress \
+          --group-id $API_SG_ID \
+          --protocol tcp \
+          --port 8080 \
+          --cidr 0.0.0.0/0 2>/dev/null || echo "API ingress rule exists"
+        
+        VPC_CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
+        aws ec2 authorize-security-group-ingress \
+          --group-id $API_SG_ID \
+          --protocol tcp \
+          --port 443 \
+          --cidr $VPC_CIDR 2>/dev/null || echo "HTTPS ingress exists"
+        
+        echo "✅ API security group rules configured"
+        
+        # Check if service exists
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
         if [ "$SERVICE_EXISTS" = "ACTIVE" ]; then
@@ -359,17 +411,6 @@ jobs:
         fi
         
         echo "Creating new service..."
-        
-        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
-        echo "Subnets: $SUBNETS"
-        
-        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
-        echo "VPC: $VPC_ID"
-        
-        if [ "$SUBNETS" = "[]" ] || [ -z "$SUBNETS" ]; then
-          echo "ERROR: No subnets available!"
-          exit 1
-        fi
         
         # Check if subnets have internet gateway routes
         SUBNET_ID=$(echo $SUBNETS | jq -r '.[0]')
@@ -462,84 +503,9 @@ jobs:
           echo "✅ Internet gateway found: $IGW_ROUTE"
         fi
         
-        # Force delete old security group if exists
-        EXISTING_SG=$(aws ec2 describe-security-groups \
-          --filters "Name=group-name,Values=servermonitoring-api-sg" \
-          --query 'SecurityGroups[0].GroupId' \
-          --output text 2>/dev/null || echo "None")
-        
-        if [ "$EXISTING_SG" != "None" ]; then
-          echo "Found existing security group: $EXISTING_SG"
-          echo "Waiting for network interfaces to detach..."
-          
-          # Wait up to 60 seconds for ENIs to detach
-          for i in {1..12}; do
-            ENI_COUNT=$(aws ec2 describe-network-interfaces \
-              --filters "Name=group-id,Values=$EXISTING_SG" \
-              --query 'length(NetworkInterfaces)' \
-              --output text 2>/dev/null || echo "0")
-            
-            echo "Attempt $i: $ENI_COUNT network interfaces still attached"
-            
-            if [ "$ENI_COUNT" = "0" ]; then
-              echo "All network interfaces detached!"
-              break
-            fi
-            
-            sleep 5
-          done
-          
-          echo "Deleting old security group..."
-          aws ec2 delete-security-group --group-id $EXISTING_SG 2>/dev/null || echo "Could not delete, reusing existing SG"
-          sleep 2
-        fi
-        
-        # Create fresh security group (or reuse if deletion failed)
-        echo "Creating new security group..."
-        SG_ID=$(aws ec2 create-security-group \
-          --group-name servermonitoring-api-sg \
-          --description "Security group for Server Monitoring API" \
-          --vpc-id $VPC_ID \
-          --query 'GroupId' \
-          --output text 2>/dev/null || \
-          aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
-            --query 'SecurityGroups[0].GroupId' \
-            --output text)
-        
-        echo "Created SG: $SG_ID"
-        sleep 2
-        
-        # EXPLICITLY add egress rule for ALL traffic (CRITICAL for ECR access)
-        echo "Adding egress rule for internet access..."
-        aws ec2 authorize-security-group-egress \
-            --group-id $SG_ID \
-            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
-        
-        # Add ingress rule for API - ALLOW FROM ANYWHERE (for now)
-        aws ec2 authorize-security-group-ingress \
-            --group-id $SG_ID \
-            --protocol tcp \
-            --port 8080 \
-            --cidr 0.0.0.0/0 2>/dev/null || echo "API ingress rule may already exist"
-        
-        # CRITICAL: Add ingress rule for HTTPS (443) for VPC endpoint access
-        echo "Adding HTTPS ingress rule for VPC endpoint connectivity..."
-        VPC_CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
-        aws ec2 authorize-security-group-ingress \
-            --group-id $SG_ID \
-            --protocol tcp \
-            --port 443 \
-            --cidr $VPC_CIDR 2>/dev/null || echo "HTTPS ingress may already exist"
-        
-        echo "VPC CIDR: $VPC_CIDR - Security group now allows HTTPS from VPC for endpoint access"
-        
-        # STORE API SG ID for later use with web tasks
-        echo "API_SG_ID=$SG_ID" >> $GITHUB_ENV
-        
-        # Verify egress rules
-        echo "Verifying security group rules..."
-        aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].{Ingress:IpPermissions,Egress:IpPermissionsEgress}' --output json
+        # Use the API_SG_ID we created/got earlier
+        SG_ID=$API_SG_ID
+        echo "Using API Security Group: $SG_ID"
           
         # Create service with JSON format
         aws ecs create-service \
@@ -709,63 +675,40 @@ jobs:
         SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
         
-        # Force delete old web security group if exists
-        EXISTING_SG_WEB=$(aws ec2 describe-security-groups \
-          --filters "Name=group-name,Values=servermonitoring-web-sg" \
+        # Get or create Web security group (REUSE existing, don't delete!)
+        SG_ID_WEB=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
           --query 'SecurityGroups[0].GroupId' \
-          --output text 2>/dev/null || echo "None")
+          --output text 2>/dev/null)
         
-        if [ "$EXISTING_SG_WEB" != "None" ]; then
-          echo "Found existing web security group: $EXISTING_SG_WEB"
-          echo "Waiting for network interfaces to detach..."
-          
-          for i in {1..12}; do
-            ENI_COUNT=$(aws ec2 describe-network-interfaces \
-              --filters "Name=group-id,Values=$EXISTING_SG_WEB" \
-              --query 'length(NetworkInterfaces)' \
-              --output text 2>/dev/null || echo "0")
-            
-            echo "Attempt $i: $ENI_COUNT network interfaces still attached"
-            
-            if [ "$ENI_COUNT" = "0" ]; then
-              break
-            fi
-            
-            sleep 5
-          done
-          
-          aws ec2 delete-security-group --group-id $EXISTING_SG_WEB 2>/dev/null || echo "Could not delete, reusing existing SG"
+        if [ "$SG_ID_WEB" = "None" ] || [ -z "$SG_ID_WEB" ]; then
+          echo "Creating new web security group..."
+          SG_ID_WEB=$(aws ec2 create-security-group \
+            --group-name servermonitoring-web-sg \
+            --description "Security group for Server Monitoring Web" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
           sleep 2
+        else
+          echo "Using existing Web security group: $SG_ID_WEB"
         fi
         
-        # Create fresh web security group (or reuse if deletion failed)
-        echo "Creating new web security group..."
-        SG_ID_WEB=$(aws ec2 create-security-group \
-          --group-name servermonitoring-web-sg \
-          --description "Security group for Server Monitoring Web" \
-          --vpc-id $VPC_ID \
-          --query 'GroupId' \
-          --output text 2>/dev/null || \
-          aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
-            --query 'SecurityGroups[0].GroupId' \
-            --output text)
-        
         echo "Web SG: $SG_ID_WEB"
-        sleep 2
         
-        # EXPLICITLY add egress rule for ALL traffic (CRITICAL for ECR access)
-        echo "Adding egress rule for web..."
+        # Ensure Web security group rules exist (idempotent)
+        echo "Ensuring Web security group rules..."
         aws ec2 authorize-security-group-egress \
             --group-id $SG_ID_WEB \
-            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Egress rule may already exist"
+            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || echo "Web egress rule exists"
         
-        # Add ingress rule for Web (port 80)
         aws ec2 authorize-security-group-ingress \
             --group-id $SG_ID_WEB \
             --protocol tcp \
             --port 80 \
-            --cidr 0.0.0.0/0 2>/dev/null || true
+            --cidr 0.0.0.0/0 2>/dev/null || echo "Web port 80 ingress exists"
+        
+        echo "✅ Web security group rules configured"
         
         # CRITICAL FIX: Allow web tasks to reach API on port 8080
         echo "⚡ CRITICAL: Allowing web -> API communication on port 8080..."
