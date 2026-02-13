@@ -1268,7 +1268,7 @@ jobs:
         fi
         
         # Create web service with ALB if it doesn't exist or was deleted
-        if [ "$WEB_SERVICE_EXISTS" = "MISSING" ] || [ "$LB_CONFIG" = "[]" ] || [ "$LB_CONFIG" = "null" ]; then
+        if [ "$WEB_SERVICE_EXISTS" = "MISSING" ] || [ "$WEB_SERVICE_EXISTS" = "ACTIVE" -a \( "$LB_CONFIG" = "[]" -o "$LB_CONFIG" = "null" \) ]; then
           echo "Creating web service with ALB integration..."
           aws ecs create-service \
               --cluster ${{ env.ECS_CLUSTER }} \
