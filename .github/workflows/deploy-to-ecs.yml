@@ -410,6 +410,40 @@ jobs:
           
           echo "✅ Created subnet: $NEW_SUBNET_ID in $NEW_AZ"
           
+          # CRITICAL: Ensure new subnet has internet access for ALB
+          echo "🔧 Configuring internet access for new subnet..."
+          
+          # Find or create internet gateway
+          IGW_ID=$(aws ec2 describe-internet-gateways \
+            --filters "Name=attachment.vpc-id,Values=$VPC_ID" \
+            --query 'InternetGateways[0].InternetGatewayId' \
+            --output text)
+          
+          if [ "$IGW_ID" = "None" ] || [ -z "$IGW_ID" ]; then
+            echo "Creating Internet Gateway..."
+            IGW_ID=$(aws ec2 create-internet-gateway --query 'InternetGateway.InternetGatewayId' --output text)
+            aws ec2 attach-internet-gateway --vpc-id $VPC_ID --internet-gateway-id $IGW_ID
+            echo "✅ Created and attached IGW: $IGW_ID"
+          else
+            echo "Using existing IGW: $IGW_ID"
+          fi
+          
+          # Get main route table
+          ROUTE_TABLE_ID=$(aws ec2 describe-route-tables \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=association.main,Values=true" \
+            --query 'RouteTables[0].RouteTableId' \
+            --output text)
+          
+          echo "Route table: $ROUTE_TABLE_ID"
+          
+          # Add route to IGW if not exists
+          aws ec2 create-route \
+            --route-table-id $ROUTE_TABLE_ID \
+            --destination-cidr-block 0.0.0.0/0 \
+            --gateway-id $IGW_ID 2>/dev/null || echo "Route to IGW already exists"
+          
+          echo "✅ New subnet has internet access"
+          
           # Add to arrays
           SUBNET_IDS+=($NEW_SUBNET_ID)
           SUBNET_AZS+=($NEW_AZ)
