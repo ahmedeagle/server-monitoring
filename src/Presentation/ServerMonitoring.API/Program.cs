@@ -163,13 +163,15 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = CompressionLevel.Fastest;
 });
 
-// Hangfire - Use SQLite storage from /data directory (persisted volume)
-var hangfireDbPath = "/data/hangfire.db";
+// Hangfire - Use SQLite storage in app directory
+var hangfireDbPath = Path.Combine(AppContext.BaseDirectory, "hangfire.db");
+// Ensure directory exists
+Directory.CreateDirectory(Path.GetDirectoryName(hangfireDbPath)!);
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseSQLiteStorage($"Data Source={hangfireDbPath}"));
+    .UseSQLiteStorage(hangfireDbPath));
 
 builder.Services.AddHangfireServer(options =>
 {
