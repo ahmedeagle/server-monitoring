@@ -163,13 +163,15 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = CompressionLevel.Fastest;
 });
 
-// Hangfire - Use SQLite in /tmp (always writable in containers)
-var hangfireDbPath = "/tmp/hangfire.db";
+// Hangfire - Use same SQLite database as application for consistency
+var hangfireConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+Log.Information("Configuring Hangfire with connection: {Connection}", hangfireConnectionString);
+
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseSQLiteStorage(hangfireDbPath));
+    .UseSQLiteStorage(hangfireConnectionString));
 
 builder.Services.AddHangfireServer(options =>
 {
