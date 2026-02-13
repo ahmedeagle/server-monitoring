@@ -124,7 +124,7 @@ public class ReportGenerationJob
             report.ErrorMessage = errorMessage;
         }
 
-        _unitOfWork.Reports.Update(report);
+        // EF Core automatically tracks changes to retrieved entities
         await _unitOfWork.SaveChangesAsync();
 
         _logger.LogInformation("Report {ReportId} status updated to {Status}", reportId, status);
