@@ -168,7 +168,10 @@ builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseInMemoryStorage());
+    .UseInMemoryStorage(new Hangfire.InMemory.InMemoryStorageOptions
+    {
+        MaxExpirationTime = TimeSpan.FromHours(24)
+    }));
 
 builder.Services.AddHangfireServer(options =>
 {
@@ -267,6 +270,8 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<IdempotencyMiddleware>();
 app.UseRateLimiting();
 
+app.UseStaticFiles(); // Enable static files for Hangfire dashboard
+
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
@@ -278,7 +283,9 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = new[] { new AllowAllDashboardAuthorizationFilter() },
     DashboardTitle = "Server Monitoring - Hangfire Dashboard",
     AppPath = null, // Disable back button
-    StatsPollingInterval = 2000
+    StatsPollingInterval = 2000,
+    IgnoreAntiforgeryToken = true,
+    DisplayStorageConnectionString = false
 });
 
 app.MapHub<MonitoringHub>("/hubs/monitoring");
