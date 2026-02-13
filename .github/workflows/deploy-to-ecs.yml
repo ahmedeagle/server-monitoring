@@ -345,9 +345,27 @@ jobs:
       run: |
         echo "🔧 Setting up Application Load Balancer..."
         
-        # Get network info
-        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+        # Get network info - select subnets from different AZs (ALB requirement)
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        echo "VPC ID: $VPC_ID"
+        
+        # Get subnets from at least 2 different AZs
+        SUBNET1=$(aws ec2 describe-subnets \
+          --filters "Name=vpc-id,Values=$VPC_ID" \
+          --query 'Subnets[0].SubnetId' \
+          --output text)
+        SUBNET2=$(aws ec2 describe-subnets \
+          --filters "Name=vpc-id,Values=$VPC_ID" \
+          --query 'Subnets[1].SubnetId' \
+          --output text)
+        
+        echo "Subnet 1: $SUBNET1"
+        echo "Subnet 2: $SUBNET2"
+        
+        if [ -z "$SUBNET1" ] || [ -z "$SUBNET2" ]; then
+          echo "❌ Error: Could not find at least 2 subnets"
+          exit 1
+        fi
         
         # Create ALB security group
         ALB_SG_ID=$(aws ec2 describe-security-groups \
@@ -402,13 +420,19 @@ jobs:
           echo "Creating Application Load Balancer..."
           ALB_ARN=$(aws elbv2 create-load-balancer \
             --name servermonitoring-alb \
-            --subnets $(echo $SUBNETS | jq -r 'join(" ")') \
+            --subnets $SUBNET1 $SUBNET2 \
             --security-groups $ALB_SG_ID \
             --scheme internet-facing \
             --type application \
             --ip-address-type ipv4 \
             --query 'LoadBalancers[0].LoadBalancerArn' \
             --output text)
+          
+          if [ -z "$ALB_ARN" ]; then
+            echo "❌ Error: Failed to create ALB"
+            exit 1
+          fi
+          
           echo "Waiting for ALB to become active..."
           aws elbv2 wait load-balancer-available --load-balancer-arns $ALB_ARN
         else
@@ -420,6 +444,12 @@ jobs:
           --load-balancer-arns $ALB_ARN \
           --query 'LoadBalancers[0].DNSName' \
           --output text)
+        
+        if [ -z "$ALB_DNS" ] || [ "$ALB_DNS" = "None" ]; then
+          echo "❌ Error: Failed to get ALB DNS"
+          exit 1
+        fi
+        
         echo "✅ ALB DNS: $ALB_DNS"
         
         # Create target group for API
@@ -444,6 +474,11 @@ jobs:
             --unhealthy-threshold-count 3 \
             --query 'TargetGroups[0].TargetGroupArn' \
             --output text)
+          
+          if [ -z "$API_TG_ARN" ]; then
+            echo "❌ Error: Failed to create API target group"
+            exit 1
+          fi
         else
           echo "Using existing API target group: $API_TG_ARN"
         fi
@@ -457,11 +492,19 @@ jobs:
         
         if [ "$LISTENER_ARN" = "None" ] || [ -z "$LISTENER_ARN" ] || [ "$LISTENER_ARN" = "null" ]; then
           echo "Creating ALB listener..."
-          aws elbv2 create-listener \
+          LISTENER_ARN=$(aws elbv2 create-listener \
             --load-balancer-arn $ALB_ARN \
             --protocol HTTP \
             --port 80 \
-            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN
+            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN \
+            --query 'Listeners[0].ListenerArn' \
+            --output text)
+          
+          if [ -z "$LISTENER_ARN" ]; then
+            echo "❌ Error: Failed to create listener"
+            exit 1
+          fi
+          echo "✅ Listener created: $LISTENER_ARN"
         else
           echo "Using existing listener: $LISTENER_ARN"
         fi
