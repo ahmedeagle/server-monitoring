@@ -526,28 +526,49 @@ jobs:
         fi
         
         # Create ALB
+        echo "🔍 Checking if ALB exists..."
         ALB_ARN=$(aws elbv2 describe-load-balancers \
           --names servermonitoring-alb \
           --query 'LoadBalancers[0].LoadBalancerArn' \
-          --output text 2>/dev/null)
+          --output text 2>/dev/null || echo "None")
+        
+        echo "ALB_ARN result: '$ALB_ARN'"
         
         if [ "$ALB_ARN" = "None" ] || [ -z "$ALB_ARN" ] || [ "$ALB_ARN" = "null" ]; then
           echo "Creating Application Load Balancer..."
-          ALB_ARN=$(aws elbv2 create-load-balancer \
+          echo "  Subnets: $SUBNET1, $SUBNET2"
+          echo "  Security Group: $ALB_SG_ID"
+          echo "  VPC: $VPC_ID"
+          
+          # Create ALB with explicit error handling
+          set +e  # Don't exit on error
+          ALB_CREATE_OUTPUT=$(aws elbv2 create-load-balancer \
             --name servermonitoring-alb \
             --subnets $SUBNET1 $SUBNET2 \
             --security-groups $ALB_SG_ID \
             --scheme internet-facing \
             --type application \
-            --ip-address-type ipv4 \
-            --query 'LoadBalancers[0].LoadBalancerArn' \
-            --output text)
+            --ip-address-type ipv4 2>&1)
+          ALB_CREATE_EXIT=$?
+          set -e  # Re-enable exit on error
           
-          if [ -z "$ALB_ARN" ]; then
-            echo "❌ Error: Failed to create ALB"
+          echo "Create ALB exit code: $ALB_CREATE_EXIT"
+          
+          if [ $ALB_CREATE_EXIT -ne 0 ]; then
+            echo "❌ Error creating ALB:"
+            echo "$ALB_CREATE_OUTPUT"
             exit 1
           fi
           
+          ALB_ARN=$(echo "$ALB_CREATE_OUTPUT" | grep -o 'arn:aws:elasticloadbalancing:[^"]*' | head -1)
+          
+          if [ -z "$ALB_ARN" ]; then
+            echo "❌ Error: Failed to extract ALB ARN from output"
+            echo "$ALB_CREATE_OUTPUT"
+            exit 1
+          fi
+          
+          echo "✅ ALB created: $ALB_ARN"
           echo "Waiting for ALB to become active..."
           aws elbv2 wait load-balancer-available --load-balancer-arns $ALB_ARN
         else
