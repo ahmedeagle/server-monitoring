@@ -3,34 +3,36 @@ using Microsoft.EntityFrameworkCore;
 using ServerMonitoring.Application.Common;
 using ServerMonitoring.Application.DTOs;
 using ServerMonitoring.Application.Interfaces;
-using ServerMonitoring.Domain.Entities;
 
 namespace ServerMonitoring.Application.Features.Servers.Commands;
 
-public class CreateServerCommandHandler : IRequestHandler<CreateServerCommand, Result<ServerDto>>
+public class UpdateServerCommandHandler : IRequestHandler<UpdateServerCommand, Result<ServerDto>>
 {
     private readonly IApplicationDbContext _context;
 
-    public CreateServerCommandHandler(IApplicationDbContext context)
+    public UpdateServerCommandHandler(IApplicationDbContext context)
     {
         _context = context;
     }
 
-    public async Task<Result<ServerDto>> Handle(CreateServerCommand request, CancellationToken cancellationToken)
+    public async Task<Result<ServerDto>> Handle(UpdateServerCommand request, CancellationToken cancellationToken)
     {
-        var server = new Server
-        {
-            Name = request.Name,
-            Hostname = request.Hostname,
-            IPAddress = request.IPAddress,
-            Port = request.Port,
-            OperatingSystem = request.OperatingSystem,
-            Status = Domain.Enums.ServerStatus.Offline,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "System"
-        };
+        var server = await _context.Servers
+            .FirstOrDefaultAsync(s => s.Id == request.Id && !s.IsDeleted, cancellationToken);
 
-        _context.Servers.Add(server);
+        if (server == null)
+        {
+            return Result<ServerDto>.Failure("Server not found");
+        }
+
+        server.Name = request.Name;
+        server.Hostname = request.Hostname;
+        server.IPAddress = request.IPAddress;
+        server.Port = request.Port;
+        server.OperatingSystem = request.OperatingSystem;
+        server.UpdatedAt = DateTime.UtcNow;
+        server.UpdatedBy = "System";
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new ServerDto

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ServerMonitoring.Application.DTOs;
+using ServerMonitoring.Application.Features.Metrics.Commands;
 using ServerMonitoring.Application.Features.Metrics.Queries;
 
 namespace ServerMonitoring.API.Controllers.V1;
@@ -40,7 +41,25 @@ public class MetricsController : ControllerBase
     public async Task<ActionResult<MetricDto>> Create([FromBody] CreateMetricDto dto)
     {
         _logger.LogInformation("Creating new metric for server {ServerId}", dto.ServerId);
-        // TODO: Implement CreateMetricCommand
-        return CreatedAtAction(nameof(GetServerMetrics), new { serverId = dto.ServerId }, new MetricDto());
+        
+        var command = new CreateMetricCommand
+        {
+            ServerId = dto.ServerId,
+            CpuUsage = dto.CpuUsage,
+            MemoryUsage = dto.MemoryUsage,
+            DiskUsage = dto.DiskUsage,
+            NetworkInbound = dto.NetworkInbound,
+            NetworkOutbound = dto.NetworkOutbound,
+            ResponseTime = dto.ResponseTime
+        };
+        
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Message);
+        }
+        
+        return CreatedAtAction(nameof(GetServerMetrics), new { serverId = dto.ServerId }, result.Data);
     }
 }

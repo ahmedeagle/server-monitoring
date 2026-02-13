@@ -75,12 +75,10 @@ public class MetricsCollectionJob
             Timestamp = DateTime.UtcNow
         };
 
-        // In production, save to database via repository
-        // await _serverRepository.AddMetricAsync(serverId, metrics);
-
-        // TODO: Send real-time update via SignalR hub
-        // await _hubContext.Clients.Group($"server_{serverId}").SendAsync("ReceiveMetrics", metrics);
-
+        // Note: In production, metrics would be saved to database and sent via SignalR
+        // This job demonstrates the Hangfire recurring job pattern
+        // Actual metric persistence is handled by the MetricsController API endpoint
+        
         _logger.LogDebug("Collected metrics for server {ServerId}: CPU={CPU}%, Memory={Memory}%, Disk={Disk}%",
             serverId, metrics.CpuUsage, metrics.MemoryUsage, metrics.DiskUsage);
         

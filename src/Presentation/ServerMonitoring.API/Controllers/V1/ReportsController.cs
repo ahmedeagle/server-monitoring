@@ -1,7 +1,9 @@
 using Asp.Versioning;
 using Hangfire;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ServerMonitoring.Application.Features.Reports.Queries;
 using ServerMonitoring.Infrastructure.BackgroundJobs;
 
 namespace ServerMonitoring.API.Controllers.V1;
@@ -16,11 +18,30 @@ namespace ServerMonitoring.API.Controllers.V1;
 [Authorize]
 public class ReportsController : ControllerBase
 {
+    private readonly IMediator _mediator;
     private readonly ILogger<ReportsController> _logger;
 
-    public ReportsController(ILogger<ReportsController> logger)
+    public ReportsController(IMediator mediator, ILogger<ReportsController> logger)
     {
+        _mediator = mediator;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Get all recent reports from database
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(List<ReportDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllReports()
+    {
+        var result = await _mediator.Send(new GetAllReportsQuery());
+        
+        if (!result.IsSuccess)
+        {
+            return BadRequest(result.Message);
+        }
+        
+        return Ok(result.Data);
     }
 
     /// <summary>

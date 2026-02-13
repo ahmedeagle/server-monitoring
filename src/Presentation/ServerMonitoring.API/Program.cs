@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Hangfire;
+using Hangfire.Dashboard;
 using Hangfire.InMemory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -271,7 +272,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseHangfireDashboard("/hangfire");
+// Hangfire Dashboard - accessible without authentication for demo
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new AllowAllDashboardAuthorizationFilter() }
+});
+
 app.MapHub<MonitoringHub>("/hubs/monitoring");
 app.MapHealthChecks("/health");
 
@@ -316,6 +322,15 @@ app.Logger.LogInformation("SignalR Hub: /hubs/monitoring");
 app.Logger.LogInformation("Health Check: /health");
 
 app.Run();
+
+// Hangfire Dashboard Authorization - allows all in demo environment
+public class AllowAllDashboardAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context)
+    {
+        return true; // Allow all requests for demo/assessment
+    }
+}
 
 // Make Program class accessible to test projects
 public partial class Program { }

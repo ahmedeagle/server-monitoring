@@ -79,8 +79,25 @@ public class ServersController : ControllerBase
     public async Task<ActionResult<ServerDto>> Update(int id, [FromBody] UpdateServerDto dto)
     {
         _logger.LogInformation("Updating server {ServerId}", id);
-        // TODO: Implement UpdateServerCommand
-        return Ok(new ServerDto());
+        
+        var command = new UpdateServerCommand
+        {
+            Id = id,
+            Name = dto.Name,
+            Hostname = dto.Hostname,
+            IPAddress = dto.IpAddress,
+            Port = dto.Port,
+            OperatingSystem = dto.OperatingSystem
+        };
+        
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return NotFound(new { Message = result.Message });
+        }
+        
+        return Ok(result.Data);
     }
 
     [HttpDelete("{id}")]
@@ -88,7 +105,15 @@ public class ServersController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         _logger.LogInformation("Deleting server {ServerId}", id);
-        // TODO: Implement DeleteServerCommand
+        
+        var command = new DeleteServerCommand { Id = id };
+        var result = await _mediator.Send(command);
+        
+        if (!result.IsSuccess)
+        {
+            return NotFound(new { Message = result.Message });
+        }
+        
         return NoContent();
     }
 }

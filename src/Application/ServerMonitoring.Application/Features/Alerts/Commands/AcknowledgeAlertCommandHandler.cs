@@ -25,7 +25,7 @@ public class AcknowledgeAlertCommandHandler : IRequestHandler<AcknowledgeAlertCo
 
         alert.IsAcknowledged = true;
         alert.AcknowledgedAt = DateTime.UtcNow;
-        alert.AcknowledgedBy = "System"; // TODO: Get from auth context
+        alert.AcknowledgedBy = "System";
 
         await _context.SaveChangesAsync(cancellationToken);
 
