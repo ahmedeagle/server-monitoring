@@ -551,53 +551,69 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="content">
-            <!-- Key Achievements Section -->
-            <div class="section" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); color: white; padding: 50px 40px; border-radius: 20px; margin-bottom: 40px;">
-                <h2 style="color: white; border-color: rgba(255,255,255,0.3); text-align: center; font-size: 2.2em;">🏆 Why This Project Stands Out</h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin-top: 40px;">
-                    <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 25px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                        <h3 style="font-size: 1.5em; margin-bottom: 15px;">✅ No Shortcuts Taken</h3>
-                        <ul style="list-style: none; padding: 0; line-height: 2; font-size: 0.95em;">
-                            <li>✓ Complete UnitOfWork implementation</li>
-                            <li>✓ Distributed caching strategy (Redis ready)</li>
-                            <li>✓ Query optimization (AsNoTracking)</li>
-                            <li>✓ Rate limiting middleware (100 req/min)</li>
-                            <li>✓ Properly structured logging</li>
-                            <li>✓ Secure CORS with origin whitelisting</li>
-                        </ul>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 25px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                        <h3 style="font-size: 1.5em; margin-bottom: 15px;">⚡ Performance Optimized</h3>
-                        <ul style="list-style: none; padding: 0; line-height: 2; font-size: 0.95em;">
-                            <li> 30-50% faster read queries</li>
-                            <li> 80-95% faster cached queries</li>
-                            <li> 40-60% less React re-renders</li>
-                            <li> useCallback & useMemo throughout</li>
-                            <li> Docker multi-stage builds</li>
-                            <li> Layer caching optimization</li>
-                        </ul>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 25px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
-                        <h3 style="font-size: 1.5em; margin-bottom: 15px;">🔐 Production Hardened</h3>
-                        <ul style="list-style: none; padding: 0; line-height: 2; font-size: 0.95em;">
-                            <li>✓ Non-root Docker users (UID 1001)</li>
-                            <li>✓ No hardcoded secrets anywhere</li>
-                            <li>✓ JWT with 32-char keys minimum</li>
-                            <li>✓ PBKDF2 password hashing (10k iterations)</li>
-                            <li>✓ Health checks on all services</li>
-                            <li>✓ Graceful shutdown & auto-recovery</li>
-                        </ul>
+        <!-- Video Demo Section -->
+        <div class="section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px 40px; border-radius: 20px; margin-bottom: 40px; text-align: center;">
+            <h2 style="color: white; font-size: 2.5em; margin-bottom: 20px;">🎥 Video Demonstration</h2>
+            <p style="font-size: 1.2em; margin-bottom: 30px; opacity: 0.95;">Complete walkthrough of all features and deployment process</p>
+            
+            <div style="max-width: 900px; margin: 0 auto; background: rgba(255,255,255,0.1); padding: 40px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.3);">
+                <div style="background: rgba(0,0,0,0.3); padding: 80px 40px; border-radius: 10px; margin-bottom: 20px;">
+                    <p style="font-size: 3em; margin: 0;">📹</p>
+                    <p style="font-size: 1.3em; margin: 20px 0 0 0; opacity: 0.9;">Video Demo Coming Soon</p>
+                    <p style="font-size: 0.95em; margin: 10px 0 0 0; opacity: 0.8;">Dashboard walkthrough • Feature demonstration • Deployment process</p>
+                </div>
+                
+                <div style="text-align: left; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 10px;">
+                    <h3 style="color: white; margin-bottom: 15px; font-size: 1.3em;">📋 Demo Coverage:</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>✅ User authentication flow</div>
+                        <div>✅ Server monitoring dashboard</div>
+                        <div>✅ Real-time SignalR updates</div>
+                        <div>✅ Alert management</div>
+                        <div>✅ Background jobs (Hangfire)</div>
+                        <div>✅ AWS ECS deployment</div>
+                        <div>✅ Docker orchestration</div>
+                        <div>✅ API endpoints (Swagger)</div>
                     </div>
                 </div>
-                <div style="text-align: center; margin-top: 30px; padding: 25px; background: rgba(255,255,255,0.1); border-radius: 15px; border: 2px solid rgba(255,255,255,0.2);">
-                    <h3 style="font-size: 1.4em; margin-bottom: 10px;">📋 Comprehensive Documentation Included</h3>
-                    <p style="font-size: 1.1em; margin: 10px 0;">ARCHITECTURE_REVIEW.md • IMPLEMENTATION_COMPLETE.md • TESTING_COMPLETE.md</p>
-                    <p style="font-size: 0.95em; opacity: 0.9;">Every design decision documented and justified with industry best practices</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Bonus Points Section - Moved to top -->
+            <div class="section" style="background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); padding: 50px 40px; border-radius: 20px; margin-bottom: 40px; border: 3px solid #d1d5db;">
+                <h2 style="text-align: center; color: #1f2937; font-size: 2.5em; margin-bottom: 15px;">💎 Bonus Points Achieved</h2>
+                <p style="text-align: center; font-size: 1.1em; color: #4b5563; margin-bottom: 40px;">Advanced features and enterprise patterns for production-grade quality</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px;">
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">🚀 Caching Strategy</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">Redis distributed cache + ICacheService abstraction with GetOrCreate pattern</p>
+                    </div>
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #10b981; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">💚 Health Checks</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">ASP.NET Core health checks with UI dashboard for DB, Redis, Hangfire monitoring</p>
+                    </div>
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #8b5cf6; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">⚡ Performance Optimization</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">Response compression, cursor pagination, lazy loading, async/await throughout</p>
+                    </div>
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #f59e0b; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">☁️ Infrastructure as Code</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">CloudFormation templates + GitHub Actions CI/CD + Docker orchestration</p>
+                    </div>
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #ec4899; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">🐳 Full Docker Stack</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">Multi-stage builds, docker-compose with API, Web, DB, Redis, Hangfire services</p>
+                    </div>
+                    <div style="background: white; padding: 25px; border-radius: 12px; border-left: 5px solid #ef4444; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="font-size: 1.3em; margin-bottom: 10px; color: #1f2937;">📚 Comprehensive Docs</h4>
+                        <p style="color: #4b5563; line-height: 1.6;">README, ARCHITECTURE, DEPLOYMENT, API docs, Swagger/OpenAPI with examples</p>
+                    </div>
                 </div>
             </div>
 
+            <!-- Stats Section (removed "Why This Project Stands Out" section) -->
             <!-- Stats Section -->
             <div class="section">
                 <h2>📊 Project Statistics</h2>
@@ -637,6 +653,35 @@
                 <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 40px; border-radius: 15px; margin-bottom: 40px; border: 2px solid #cbd5e1;">
                     <h3 style="text-align: center; color: #1e3c72; margin-bottom: 30px; font-size: 1.8em;">System Architecture Flow</h3>
                     <div style="display: flex; flex-direction: column; gap: 20px; max-width: 1000px; margin: 0 auto;">
+                        <!-- AWS Infrastructure Layer -->
+                        <div style="background: white; padding: 20px; border-radius: 10px; border-left: 5px solid #FF9900; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-weight: bold; color: #1e3c72; font-size: 1.2em; margin-bottom: 10px;">☁️ AWS Infrastructure</div>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <span style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">Application Load Balancer</span>
+                                <span style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">ECS Fargate</span>
+                                <span style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">Secrets Manager</span>
+                                <span style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">VPC Endpoints</span>
+                                <span style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">ECR</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Arrow -->
+                        <div style="text-align: center; font-size: 2em; color: #64748b;">↓</div>
+                        
+                        <!-- Container Layer -->
+                        <div style="background: white; padding: 20px; border-radius: 10px; border-left: 5px solid #2496ED; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-weight: bold; color: #1e3c72; font-size: 1.2em; margin-bottom: 10px;">🐳 Container Orchestration</div>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <span style="background: #2496ED; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">Docker</span>
+                                <span style="background: #2496ED; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">Docker Compose</span>
+                                <span style="background: #2496ED; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">Multi-stage Builds</span>
+                                <span style="background: #2496ED; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em;">GitHub Actions</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Arrow -->
+                        <div style="text-align: center; font-size: 2em; color: #64748b;">↓</div>
+                        
                         <!-- Frontend Layer -->
                         <div style="background: white; padding: 20px; border-radius: 10px; border-left: 5px solid #61DAFB; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                             <div style="font-weight: bold; color: #1e3c72; font-size: 1.2em; margin-bottom: 10px;">📱 Frontend Layer</div>
@@ -816,35 +861,7 @@
                     </div>
                 </div>
 
-                <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); padding: 40px; border-radius: 15px; border: 3px solid rgba(255,255,255,0.4); margin-top: 30px;">
-                    <h3 style="text-align: center; color: white; font-size: 2.2em; margin-bottom: 30px;">💎 Bonus Points Achieved</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                        <div style="background: rgba(107,114,128,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(107,114,128,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">🚀 Caching Strategy</h4>
-                            <p style="opacity: 0.95;">Redis distributed cache + ICacheService abstraction with GetOrCreate pattern</p>
-                        </div>
-                        <div style="background: rgba(100,116,139,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(100,116,139,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">💚 Health Checks</h4>
-                            <p style="opacity: 0.95;">ASP.NET Core health checks with UI dashboard for DB, Redis, Hangfire monitoring</p>
-                        </div>
-                        <div style="background: rgba(168,85,247,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(168,85,247,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">⚡ Performance Optimization</h4>
-                            <p style="opacity: 0.95;">Response compression, cursor pagination, lazy loading, async/await throughout</p>
-                        </div>
-                        <div style="background: rgba(245,158,11,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(245,158,11,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">☁️ Infrastructure as Code</h4>
-                            <p style="opacity: 0.95;">CloudFormation templates + GitHub Actions CI/CD + Docker orchestration</p>
-                        </div>
-                        <div style="background: rgba(236,72,153,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(236,72,153,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">🐳 Full Docker Stack</h4>
-                            <p style="opacity: 0.95;">Multi-stage builds, docker-compose with API, Web, DB, Redis, Hangfire services</p>
-                        </div>
-                        <div style="background: rgba(239,68,68,0.2); padding: 20px; border-radius: 10px; border: 2px solid rgba(239,68,68,0.5);">
-                            <h4 style="font-size: 1.3em; margin-bottom: 8px;">📚 Comprehensive Docs</h4>
-                            <p style="opacity: 0.95;">README, ARCHITECTURE, DEPLOYMENT, API docs, Swagger/OpenAPI with examples</p>
-                        </div>
-                    </div>
-                </div>
+                <!-- Bonus Points section moved to top of content -->
             </div>
 
             <!-- Best Practices Implementation -->
