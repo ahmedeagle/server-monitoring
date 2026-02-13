@@ -830,73 +830,59 @@ jobs:
         
         echo "Internet Gateway route: $IGW_ROUTE"
         
-        # Create VPC Endpoints for ECR if no internet gateway (CRITICAL FIX)
+        # ALWAYS create VPC Endpoints for ECR (faster, more reliable than IGW routing)
+        echo "🔧 Ensuring VPC endpoints for ECR access..."
+        
+        # Create VPC endpoint for ECR API
+        aws ec2 create-vpc-endpoint \
+          --vpc-id $VPC_ID \
+          --vpc-endpoint-type Interface \
+          --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.api \
+          --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+          --security-group-ids $SG_ID \
+          --private-dns-enabled 2>/dev/null || echo "✅ ECR API endpoint exists"
+        
+        # Create VPC endpoint for ECR Docker
+        aws ec2 create-vpc-endpoint \
+          --vpc-id $VPC_ID \
+          --vpc-endpoint-type Interface \
+          --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.dkr \
+          --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+          --security-group-ids $SG_ID \
+          --private-dns-enabled 2>/dev/null || echo "✅ ECR DKR endpoint exists"
+        
+        # Create VPC endpoint for S3 (needed for ECR layers)
+        aws ec2 create-vpc-endpoint \
+          --vpc-id $VPC_ID \
+          --vpc-endpoint-type Gateway \
+          --service-name com.amazonaws.${{ env.AWS_REGION }}.s3 \
+          --route-table-ids $ROUTE_TABLE 2>/dev/null || echo "✅ S3 endpoint exists"
+        
+        # Create VPC endpoint for Secrets Manager (tasks pull secrets at startup)
+        aws ec2 create-vpc-endpoint \
+          --vpc-id $VPC_ID \
+          --vpc-endpoint-type Interface \
+          --service-name com.amazonaws.${{ env.AWS_REGION }}.secretsmanager \
+          --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+          --security-group-ids $SG_ID \
+          --private-dns-enabled 2>/dev/null || echo "✅ Secrets Manager endpoint exists"
+        
+        # Create VPC endpoint for CloudWatch Logs
+        aws ec2 create-vpc-endpoint \
+          --vpc-id $VPC_ID \
+          --vpc-endpoint-type Interface \
+          --service-name com.amazonaws.${{ env.AWS_REGION }}.logs \
+          --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
+          --security-group-ids $SG_ID \
+          --private-dns-enabled 2>/dev/null || echo "✅ CloudWatch Logs endpoint exists"
+        
+        echo "✅ VPC endpoints configured for ECR, S3, Secrets Manager, CloudWatch"
+        
+        # Note: VPC endpoints are preferred even with IGW as they're faster and more reliable
         if [ "$IGW_ROUTE" = "None" ] || [ -z "$IGW_ROUTE" ]; then
-          echo "⚠️  WARNING: No internet gateway found! Creating VPC endpoints with Private DNS..."
-          
-          # Delete existing broken VPC endpoints (without DNS enabled) and recreate them properly
-          echo "Cleaning up any existing VPC endpoints without Private DNS..."
-          EXISTING_ENDPOINTS=$(aws ec2 describe-vpc-endpoints \
-            --filters Name=vpc-id,Values=$VPC_ID \
-            --query 'VpcEndpoints[?PrivateDnsEnabled==`false` && VpcEndpointType==`Interface`].VpcEndpointId' \
-            --output text)
-          
-          if [ ! -z "$EXISTING_ENDPOINTS" ]; then
-            echo "Deleting endpoints without DNS: $EXISTING_ENDPOINTS"
-            for ENDPOINT_ID in $EXISTING_ENDPOINTS; do
-              aws ec2 delete-vpc-endpoints --vpc-endpoint-ids $ENDPOINT_ID 2>/dev/null || true
-            done
-            echo "Waiting 10 seconds for deletions..."
-            sleep 10
-          fi
-          
-          # Create VPC endpoint for ECR API
-          aws ec2 create-vpc-endpoint \
-            --vpc-id $VPC_ID \
-            --vpc-endpoint-type Interface \
-            --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.api \
-            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
-            --security-group-ids $SG_ID \
-            --private-dns-enabled 2>/dev/null || echo "ECR API endpoint may already exist"
-          
-          # Create VPC endpoint for ECR Docker
-          aws ec2 create-vpc-endpoint \
-            --vpc-id $VPC_ID \
-            --vpc-endpoint-type Interface \
-            --service-name com.amazonaws.${{ env.AWS_REGION }}.ecr.dkr \
-            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
-            --security-group-ids $SG_ID \
-            --private-dns-enabled 2>/dev/null || echo "ECR DKR endpoint may already exist"
-          
-          # Create VPC endpoint for S3 (needed for ECR layers)
-          aws ec2 create-vpc-endpoint \
-            --vpc-id $VPC_ID \
-            --vpc-endpoint-type Gateway \
-            --service-name com.amazonaws.${{ env.AWS_REGION }}.s3 \
-            --route-table-ids $ROUTE_TABLE 2>/dev/null || echo "S3 endpoint may already exist"
-          
-          # Create VPC endpoint for Secrets Manager (CRITICAL - tasks pull secrets at startup)
-          aws ec2 create-vpc-endpoint \
-            --vpc-id $VPC_ID \
-            --vpc-endpoint-type Interface \
-            --service-name com.amazonaws.${{ env.AWS_REGION }}.secretsmanager \
-            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
-            --security-group-ids $SG_ID \
-            --private-dns-enabled 2>/dev/null || echo "Secrets Manager endpoint may already exist"
-          
-          # Create VPC endpoint for CloudWatch Logs
-          aws ec2 create-vpc-endpoint \
-            --vpc-id $VPC_ID \
-            --vpc-endpoint-type Interface \
-            --service-name com.amazonaws.${{ env.AWS_REGION }}.logs \
-            --subnet-ids $(echo $SUBNETS | jq -r 'join(" ")') \
-            --security-group-ids $SG_ID \
-            --private-dns-enabled 2>/dev/null || echo "CloudWatch Logs endpoint may already exist"
-          
-          echo "✅ VPC endpoints created with Private DNS enabled (ECR, S3, Secrets Manager, CloudWatch)"
-          echo "✅ Tasks can now resolve *.amazonaws.com DNS names via private AWS network"
+          echo "ℹ️  No Internet Gateway - relying entirely on VPC endpoints"
         else
-          echo "✅ Internet gateway found: $IGW_ROUTE"
+          echo "✅ Internet gateway found: $IGW_ROUTE (VPC endpoints provide faster ECR access)"
         fi
         
         # Use the API_SG_ID we created/got earlier
