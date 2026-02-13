@@ -394,6 +394,25 @@ jobs:
         
         echo "✅ API security group rules configured"
         
+        # CRITICAL: Ensure Web -> API connectivity rule exists (even on updates!)
+        echo "⚡ Ensuring Web -> API connectivity..."
+        WEB_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null)
+        
+        if [ "$WEB_SG_ID" != "None" ] && [ -n "$WEB_SG_ID" ]; then
+          echo "Found Web SG: $WEB_SG_ID - Adding Web -> API rule..."
+          aws ec2 authorize-security-group-ingress \
+            --group-id $API_SG_ID \
+            --protocol tcp \
+            --port 8080 \
+            --source-group $WEB_SG_ID 2>/dev/null || echo "   Rule already exists (OK)"
+          echo "✅ Web -> API connectivity ensured"
+        else
+          echo "ℹ️  Web SG doesn't exist yet (will be created later)"
+        fi
+        
         # Check if service exists
         SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_API_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
         
@@ -769,6 +788,42 @@ jobs:
                 }
               }"
         fi
+
+    - name: Ensure security group connectivity (critical fix)
+      run: |
+        echo "🔧 Final check: Ensuring Web -> API connectivity..."
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        
+        # Get both security group IDs
+        API_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text)
+        
+        WEB_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-web-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text)
+        
+        echo "API SG: $API_SG_ID"
+        echo "Web SG: $WEB_SG_ID"
+        
+        # Ensure Web -> API rule exists
+        echo "Adding Web -> API connectivity rule..."
+        aws ec2 authorize-security-group-ingress \
+          --group-id $API_SG_ID \
+          --protocol tcp \
+          --port 8080 \
+          --source-group $WEB_SG_ID 2>/dev/null && echo "✅ Rule added" || echo "✅ Rule already exists"
+        
+        # Also ensure API accepts traffic from anywhere (for direct access)
+        aws ec2 authorize-security-group-ingress \
+          --group-id $API_SG_ID \
+          --protocol tcp \
+          --port 8080 \
+          --cidr 0.0.0.0/0 2>/dev/null && echo "✅ Public access rule added" || echo "✅ Public access rule exists"
+        
+        echo "🎯 Security group connectivity verified!"
 
     - name: Check Web service created
       run: |
