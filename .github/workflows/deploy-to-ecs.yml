@@ -831,11 +831,32 @@ jobs:
         fi
         
         # Create VPC endpoint for S3 (needed for ECR layers)
+        # Get ALL route tables in VPC to ensure S3 endpoint works for all subnets
+        ALL_ROUTE_TABLES=$(aws ec2 describe-route-tables \
+          --filters "Name=vpc-id,Values=$VPC_ID" \
+          --query 'RouteTables[*].RouteTableId' \
+          --output text | tr '\t' ' ')
+        
+        echo "Route tables in VPC: $ALL_ROUTE_TABLES"
+        
         aws ec2 create-vpc-endpoint \
           --vpc-id $VPC_ID \
           --vpc-endpoint-type Gateway \
           --service-name com.amazonaws.${{ env.AWS_REGION }}.s3 \
-          --route-table-ids $ROUTE_TABLE 2>/dev/null || echo "✅ S3 endpoint exists"
+          --route-table-ids $ALL_ROUTE_TABLES 2>/dev/null || echo "S3 endpoint already exists"
+        
+        # Update existing S3 endpoint to include all route tables
+        S3_ENDPOINT=$(aws ec2 describe-vpc-endpoints \
+          --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=com.amazonaws.${{ env.AWS_REGION }}.s3" \
+          --query 'VpcEndpoints[0].VpcEndpointId' --output text)
+        
+        if [ "$S3_ENDPOINT" != "None" ] && [ -n "$S3_ENDPOINT" ]; then
+          echo "Updating S3 endpoint $S3_ENDPOINT with all route tables..."
+          for RT_ID in $ALL_ROUTE_TABLES; do
+            aws ec2 modify-vpc-endpoint --vpc-endpoint-id $S3_ENDPOINT --add-route-table-ids $RT_ID 2>/dev/null || true
+          done
+          echo "✅ S3 endpoint updated with all route tables"
+        fi
         
         # Create VPC endpoint for Secrets Manager
         aws ec2 create-vpc-endpoint \
