@@ -203,17 +203,26 @@ public class ReportsController : ControllerBase
     private string GenerateReportCsv(ReportDto report)
     {
         var csv = new System.Text.StringBuilder();
-        csv.AppendLine("Report ID,Server ID,Type,Start Date,End Date,Status,Created At");
-        csv.AppendLine($"{report.Id},{report.ServerId},{report.Type},{report.StartDate:yyyy-MM-dd},{report.EndDate:yyyy-MM-dd},{report.Status},{report.CreatedAt:yyyy-MM-dd HH:mm:ss}");
-        csv.AppendLine();
-        csv.AppendLine("Metric,Value");
+        csv.AppendLine("Report Details");
+        csv.AppendLine($"Report ID,{report.Id}");
+        csv.AppendLine($"Title,\"{report.Title}\"");
+        csv.AppendLine($"Description,\"{report.Description}\"");
+        csv.AppendLine($"Type,{report.Type}");
+        csv.AppendLine($"Status,{report.Status}");
+        csv.AppendLine($"Start Date,{report.StartDate:yyyy-MM-dd HH:mm:ss}");
+        csv.AppendLine($"End Date,{report.EndDate:yyyy-MM-dd HH:mm:ss}");
+        csv.AppendLine($"Created At,{report.CreatedAt:yyyy-MM-dd HH:mm:ss}");
         
-        // Add metrics if available
-        if (report.Data != null)
+        if (report.GeneratedAt.HasValue)
         {
-            csv.AppendLine($"CPU Usage,{report.Data.GetValueOrDefault("CpuUsage", "N/A")}");
-            csv.AppendLine($"Memory Usage,{report.Data.GetValueOrDefault("MemoryUsage", "N/A")}");
-            csv.AppendLine($"Disk Usage,{report.Data.GetValueOrDefault("DiskUsage", "N/A")}");
+            csv.AppendLine($"Generated At,{report.GeneratedAt.Value:yyyy-MM-dd HH:mm:ss}");
+        }
+        
+        if (!string.IsNullOrEmpty(report.FilePath))
+        {
+            csv.AppendLine($"File Path,{report.FilePath}");
+            csv.AppendLine($"File Format,{report.FileFormat}");
+            csv.AppendLine($"File Size (bytes),{report.FileSizeBytes}");
         }
         
         return csv.ToString();
