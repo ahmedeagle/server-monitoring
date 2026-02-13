@@ -1,7 +1,7 @@
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Dashboard;
-using Hangfire.MemoryStorage;
+using Hangfire.Storage.SQLite;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
@@ -163,12 +163,13 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = CompressionLevel.Fastest;
 });
 
-// Hangfire
+// Hangfire - Use SQLite storage from /data directory (persisted volume)
+var hangfireDbPath = "/data/hangfire.db";
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseMemoryStorage());
+    .UseSQLiteStorage($"Data Source={hangfireDbPath}"));
 
 builder.Services.AddHangfireServer(options =>
 {
