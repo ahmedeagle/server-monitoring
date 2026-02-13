@@ -806,7 +806,7 @@ jobs:
               --health-check-grace-period-seconds 300
             
             echo "✅ Service updated successfully!"
-            exit 0
+            echo "⏭️  Continuing to Web service deployment..."
           fi
         fi
         
@@ -960,7 +960,7 @@ jobs:
           
           if curl -f -s -m 5 "http://$ALB_DNS/health" > /dev/null 2>&1; then
             echo "✅ ALB is healthy!"
-            exit 0
+            break
           fi
           
           sleep 10
