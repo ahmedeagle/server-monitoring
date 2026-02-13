@@ -368,19 +368,55 @@ jobs:
         
         echo "📊 Found $SUBNET_COUNT total subnet(s)"
         
-        # Step 2: Check if we have at least 2 subnets
+        # Step 2: If only 1 subnet, create a second one automatically
         if [ $SUBNET_COUNT -lt 2 ]; then
-          echo "⚠️  ALB requires at least 2 subnets in different availability zones"
-          echo "❌ Only found $SUBNET_COUNT subnet(s)"
-          echo ""
-          echo "Please ensure your AWS account has at least 2 subnets available."
-          echo "You can create them in AWS Console: VPC > Subnets > Create subnet"
-          echo ""
-          echo "Available subnets details:"
-          for i in "${!SUBNET_IDS[@]}"; do
-            echo "  - Subnet: ${SUBNET_IDS[$i]}, AZ: ${SUBNET_AZS[$i]}, VPC: ${SUBNET_VPCS[$i]}"
+          echo "⚠️  Only 1 subnet found - ALB requires 2+ subnets"
+          echo "🔧 Auto-creating second subnet in different AZ..."
+          
+          VPC_ID=${SUBNET_VPCS[0]}
+          EXISTING_AZ=${SUBNET_AZS[0]}
+          
+          # Get VPC CIDR
+          VPC_CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
+          echo "VPC CIDR: $VPC_CIDR"
+          
+          # Get different AZ from the existing subnet
+          ALL_AZS=$(aws ec2 describe-availability-zones --query 'AvailabilityZones[*].ZoneName' --output text)
+          NEW_AZ=""
+          for az in $ALL_AZS; do
+            if [ "$az" != "$EXISTING_AZ" ]; then
+              NEW_AZ=$az
+              break
+            fi
           done
-          exit 1
+          
+          if [ -z "$NEW_AZ" ]; then
+            echo "❌ Could not find another availability zone"
+            exit 1
+          fi
+          
+          echo "Creating subnet in AZ: $NEW_AZ"
+          
+          # Calculate new subnet CIDR (use next available /24 block)
+          BASE_CIDR=$(echo $VPC_CIDR | cut -d'/' -f1 | cut -d'.' -f1-2)
+          NEW_SUBNET_CIDR="${BASE_CIDR}.1.0/24"
+          
+          NEW_SUBNET_ID=$(aws ec2 create-subnet \
+            --vpc-id $VPC_ID \
+            --cidr-block $NEW_SUBNET_CIDR \
+            --availability-zone $NEW_AZ \
+            --query 'Subnet.SubnetId' \
+            --output text)
+          
+          echo "✅ Created subnet: $NEW_SUBNET_ID in $NEW_AZ"
+          
+          # Add to arrays
+          SUBNET_IDS+=($NEW_SUBNET_ID)
+          SUBNET_AZS+=($NEW_AZ)
+          SUBNET_VPCS+=($VPC_ID)
+          SUBNET_COUNT=2
+          
+          echo "✅ Now have $SUBNET_COUNT subnets"
         fi
         
         # Step 3: Select 2 subnets preferably from different AZs
