@@ -9,6 +9,15 @@ using ServerMonitoring.Infrastructure.BackgroundJobs;
 
 namespace ServerMonitoring.API.Controllers.V1;
 
+public class GenerateReportRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+}
+
 /// <summary>
 /// Controller for managing performance reports
 /// Demonstrates Hangfire fire-and-forget and delayed jobs
@@ -48,43 +57,41 @@ public class ReportsController : ControllerBase
     /// <summary>
     /// Generate a performance report (Fire-and-Forget Job)
     /// </summary>
-    /// <param name="serverId">Server ID to generate report for</param>
-    /// <param name="days">Number of days to include in report (default: 7)</param>
+    /// <param name="request">Report generation parameters</param>
     /// <returns>Report ID for tracking</returns>
     [HttpPost("generate")]
     [ProducesResponseType(typeof(object), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public IActionResult GenerateReport([FromQuery] int serverId, [FromQuery] int days = 7)
+    public IActionResult GenerateReport([FromBody] GenerateReportRequest request)
     {
         try
         {
             var reportId = Guid.NewGuid().ToString();
-            var startDate = DateTime.UtcNow.AddDays(-days);
-            var endDate = DateTime.UtcNow;
+            var serverId = 1; // Default server for demo
 
             // Enqueue fire-and-forget job
             var jobId = BackgroundJob.Enqueue<ReportGenerationJob>(job => 
-                job.GenerateReportAsync(serverId, startDate, endDate, reportId));
+                job.GenerateReportAsync(serverId, request.StartDate, request.EndDate, reportId));
 
             // Continuation job: Process after report generation completes
             BackgroundJob.ContinueJobWith<ReportGenerationJob>(jobId, job => 
                 job.NotifyReportCompletionAsync(reportId));
 
-            _logger.LogInformation("Report generation enqueued with continuation. Server: {ServerId}, Report: {ReportId}, JobId: {JobId}", 
-                serverId, reportId, jobId);
+            _logger.LogInformation("Report generation enqueued. Title: {Title}, Type: {Type}, Report: {ReportId}, JobId: {JobId}", 
+                request.Title, request.Type, reportId, jobId);
 
             return Accepted(new
             {
                 ReportId = reportId,
                 ServerId = serverId,
-                Period = new { StartDate = startDate, EndDate = endDate },
+                Period = new { StartDate = request.StartDate, EndDate = request.EndDate },
                 Status = "Queued",
                 Message = "Report generation has been queued. Check status with the report ID."
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enqueue report generation for server {ServerId}", serverId);
+            _logger.LogError(ex, "Failed to enqueue report generation");
             return BadRequest(new { Error = "Failed to queue report generation" });
         }
     }
