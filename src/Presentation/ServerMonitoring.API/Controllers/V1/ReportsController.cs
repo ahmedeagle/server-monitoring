@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ServerMonitoring.Application.DTOs;
 using ServerMonitoring.Application.Features.Reports.Queries;
+using ServerMonitoring.Application.Interfaces;
+using ServerMonitoring.Domain.Entities;
+using ServerMonitoring.Domain.Enums;
 using ServerMonitoring.Infrastructure.BackgroundJobs;
 
 namespace ServerMonitoring.API.Controllers.V1;
@@ -30,11 +33,13 @@ public class ReportsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ILogger<ReportsController> _logger;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public ReportsController(IMediator mediator, ILogger<ReportsController> logger)
+    public ReportsController(IMediator mediator, ILogger<ReportsController> logger, IUnitOfWork unitOfWork)
     {
         _mediator = mediator;
         _logger = logger;
+        _unitOfWork = unitOfWork;
     }
 
     /// <summary>
@@ -62,27 +67,47 @@ public class ReportsController : ControllerBase
     [HttpPost("generate")]
     [ProducesResponseType(typeof(object), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public IActionResult GenerateReport([FromBody] GenerateReportRequest request)
+    public async Task<IActionResult> GenerateReport([FromBody] GenerateReportRequest request)
     {
         try
         {
-            var reportId = Guid.NewGuid().ToString();
+            // Parse report type
+            if (!Enum.TryParse<ReportType>(request.Type, true, out var reportType))
+            {
+                reportType = ReportType.DailyMetrics;
+            }
+
+            // Create report entity in database
+            var report = new Report
+            {
+                Title = request.Title,
+                Description = request.Description,
+                Type = reportType,
+                Status = ReportStatus.Processing,
+                StartDate = request.StartDate,
+                EndDate = request.EndDate,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _unitOfWork.Reports.AddAsync(report);
+            await _unitOfWork.SaveChangesAsync();
+
             var serverId = 1; // Default server for demo
 
-            // Enqueue fire-and-forget job
+            // Enqueue fire-and-forget job with actual report ID
             var jobId = BackgroundJob.Enqueue<ReportGenerationJob>(job => 
-                job.GenerateReportAsync(serverId, request.StartDate, request.EndDate, reportId));
+                job.GenerateReportAsync(report.Id, serverId, request.StartDate, request.EndDate));
 
             // Continuation job: Process after report generation completes
             BackgroundJob.ContinueJobWith<ReportGenerationJob>(jobId, job => 
-                job.NotifyReportCompletionAsync(reportId));
+                job.NotifyReportCompletionAsync(report.Id));
 
-            _logger.LogInformation("Report generation enqueued. Title: {Title}, Type: {Type}, Report: {ReportId}, JobId: {JobId}", 
-                request.Title, request.Type, reportId, jobId);
+            _logger.LogInformation("Report generation enqueued. Title: {Title}, Type: {Type}, ReportId: {ReportId}, JobId: {JobId}", 
+                request.Title, request.Type, report.Id, jobId);
 
             return Accepted(new
             {
-                ReportId = reportId,
+                ReportId = report.Id,
                 ServerId = serverId,
                 Period = new { StartDate = request.StartDate, EndDate = request.EndDate },
                 Status = "Queued",
@@ -92,7 +117,7 @@ public class ReportsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to enqueue report generation");
-            return BadRequest(new { Error = "Failed to queue report generation" });
+            return BadRequest(new { Error = "Failed to queue report generation", Details = ex.Message });
         }
     }
 

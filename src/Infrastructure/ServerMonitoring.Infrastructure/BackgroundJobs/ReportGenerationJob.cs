@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using ServerMonitoring.Application.Interfaces;
+using ServerMonitoring.Domain.Enums;
 using ServerMonitoring.Domain.Interfaces;
 
 namespace ServerMonitoring.Infrastructure.BackgroundJobs;
@@ -10,24 +12,27 @@ namespace ServerMonitoring.Infrastructure.BackgroundJobs;
 public class ReportGenerationJob
 {
     private readonly IServerRepository _serverRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ReportGenerationJob> _logger;
 
     public ReportGenerationJob(
         IServerRepository serverRepository,
+        IUnitOfWork unitOfWork,
         ILogger<ReportGenerationJob> logger)
     {
         _serverRepository = serverRepository;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
     /// <summary>
     /// Generates a performance report for the specified parameters
     /// </summary>
+    /// <param name="reportId">Report ID from database</param>
     /// <param name="serverId">Server ID to generate report for</param>
     /// <param name="startDate">Start date for report data</param>
     /// <param name="endDate">End date for report data</param>
-    /// <param name="reportId">Unique report identifier</param>
-    public async Task GenerateReportAsync(int serverId, DateTime startDate, DateTime endDate, string reportId)
+    public async Task GenerateReportAsync(int reportId, int serverId, DateTime startDate, DateTime endDate)
     {
         _logger.LogInformation("Starting report generation for server {ServerId}, Report ID: {ReportId}", 
             serverId, reportId);
@@ -35,17 +40,17 @@ public class ReportGenerationJob
         try
         {
             // Update report status to Processing
-            await UpdateReportStatusAsync(reportId, "Processing");
+            await UpdateReportStatusAsync(reportId, ReportStatus.Processing);
 
             await Task.Delay(TimeSpan.FromSeconds(5));
 
             var reportData = await GenerateReportDataAsync(serverId, startDate, endDate);
 
             // Save report to storage (file system, blob storage, etc.)
-            var reportPath = await SaveReportAsync(reportId, reportData);
+            var reportPath = await SaveReportAsync(reportId.ToString(), reportData);
 
             // Update report status to Completed
-            await UpdateReportStatusAsync(reportId, "Completed", reportPath);
+            await UpdateReportStatusAsync(reportId, ReportStatus.Completed, reportPath);
 
             _logger.LogInformation("Report generation completed successfully. Report ID: {ReportId}, Path: {Path}", 
                 reportId, reportPath);
@@ -53,7 +58,7 @@ public class ReportGenerationJob
         catch (Exception ex)
         {
             _logger.LogError(ex, "Report generation failed for Report ID: {ReportId}", reportId);
-            await UpdateReportStatusAsync(reportId, "Failed", errorMessage: ex.Message);
+            await UpdateReportStatusAsync(reportId, ReportStatus.Failed, errorMessage: ex.Message);
             throw;
         }
     }
@@ -94,11 +99,35 @@ public class ReportGenerationJob
         return reportPath;
     }
 
-    private async Task UpdateReportStatusAsync(string reportId, string status, string? path = null, string? errorMessage = null)
+    private async Task UpdateReportStatusAsync(int reportId, ReportStatus status, string? path = null, string? errorMessage = null)
     {
-        // In production, update report status in database
+        var report = await _unitOfWork.Reports.GetByIdAsync(reportId);
+        if (report == null)
+        {
+            _logger.LogWarning("Report {ReportId} not found in database", reportId);
+            return;
+        }
+
+        report.Status = status;
+        report.UpdatedAt = DateTime.UtcNow;
+
+        if (status == ReportStatus.Completed && !string.IsNullOrEmpty(path))
+        {
+            report.FilePath = path;
+            report.FileFormat = "PDF";
+            report.FileSizeBytes = 524288; // Simulated file size
+            report.GeneratedAt = DateTime.UtcNow;
+        }
+
+        if (status == ReportStatus.Failed && !string.IsNullOrEmpty(errorMessage))
+        {
+            report.ErrorMessage = errorMessage;
+        }
+
+        _unitOfWork.Reports.Update(report);
+        await _unitOfWork.SaveChangesAsync();
+
         _logger.LogInformation("Report {ReportId} status updated to {Status}", reportId, status);
-        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -106,7 +135,7 @@ public class ReportGenerationJob
     /// This demonstrates Hangfire continuation jobs
     /// </summary>
     /// <param name="reportId">The completed report ID</param>
-    public async Task NotifyReportCompletionAsync(string reportId)
+    public async Task NotifyReportCompletionAsync(int reportId)
     {
         _logger.LogInformation("Processing continuation job for completed report {ReportId}", reportId);
 
