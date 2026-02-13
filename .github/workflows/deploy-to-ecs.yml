@@ -589,14 +589,20 @@ jobs:
         echo "✅ ALB DNS: $ALB_DNS"
         
         # Create target group for API
+        echo "🔍 Checking if API target group exists..."
         API_TG_ARN=$(aws elbv2 describe-target-groups \
           --names servermonitoring-api-tg \
           --query 'TargetGroups[0].TargetGroupArn' \
-          --output text 2>/dev/null)
+          --output text 2>/dev/null || echo "None")
+        
+        echo "API_TG_ARN result: '$API_TG_ARN'"
         
         if [ "$API_TG_ARN" = "None" ] || [ -z "$API_TG_ARN" ] || [ "$API_TG_ARN" = "null" ]; then
           echo "Creating API target group..."
-          API_TG_ARN=$(aws elbv2 create-target-group \
+          echo "  VPC: $VPC_ID"
+          
+          set +e  # Don't exit on error
+          TG_CREATE_OUTPUT=$(aws elbv2 create-target-group \
             --name servermonitoring-api-tg \
             --protocol HTTP \
             --port 8080 \
@@ -607,12 +613,23 @@ jobs:
             --health-check-interval-seconds 30 \
             --health-check-timeout-seconds 5 \
             --healthy-threshold-count 2 \
-            --unhealthy-threshold-count 3 \
-            --query 'TargetGroups[0].TargetGroupArn' \
-            --output text)
+            --unhealthy-threshold-count 3 2>&1)
+          TG_CREATE_EXIT=$?
+          set -e  # Re-enable exit on error
+          
+          echo "Create TG exit code: $TG_CREATE_EXIT"
+          
+          if [ $TG_CREATE_EXIT -ne 0 ]; then
+            echo "❌ Error creating target group:"
+            echo "$TG_CREATE_OUTPUT"
+            exit 1
+          fi
+          
+          API_TG_ARN=$(echo "$TG_CREATE_OUTPUT" | grep -o 'arn:aws:elasticloadbalancing:[^"]*targetgroup[^"]*' | head -1)
           
           if [ -z "$API_TG_ARN" ]; then
-            echo "❌ Error: Failed to create API target group"
+            echo "❌ Error: Failed to extract target group ARN"
+            echo "$TG_CREATE_OUTPUT"
             exit 1
           fi
         else
@@ -621,23 +638,41 @@ jobs:
         echo "✅ API Target Group: $API_TG_ARN"
         
         # Create listener
+        echo "🔍 Checking if listener exists..."
         LISTENER_ARN=$(aws elbv2 describe-listeners \
           --load-balancer-arn $ALB_ARN \
           --query 'Listeners[0].ListenerArn' \
-          --output text 2>/dev/null)
+          --output text 2>/dev/null || echo "None")
+        
+        echo "LISTENER_ARN result: '$LISTENER_ARN'"
         
         if [ "$LISTENER_ARN" = "None" ] || [ -z "$LISTENER_ARN" ] || [ "$LISTENER_ARN" = "null" ]; then
           echo "Creating ALB listener..."
-          LISTENER_ARN=$(aws elbv2 create-listener \
+          echo "  ALB: $ALB_ARN"
+          echo "  Target Group: $API_TG_ARN"
+          
+          set +e  # Don't exit on error
+          LISTENER_CREATE_OUTPUT=$(aws elbv2 create-listener \
             --load-balancer-arn $ALB_ARN \
             --protocol HTTP \
             --port 80 \
-            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN \
-            --query 'Listeners[0].ListenerArn' \
-            --output text)
+            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN 2>&1)
+          LISTENER_CREATE_EXIT=$?
+          set -e  # Re-enable exit on error
+          
+          echo "Create listener exit code: $LISTENER_CREATE_EXIT"
+          
+          if [ $LISTENER_CREATE_EXIT -ne 0 ]; then
+            echo "❌ Error creating listener:"
+            echo "$LISTENER_CREATE_OUTPUT"
+            exit 1
+          fi
+          
+          LISTENER_ARN=$(echo "$LISTENER_CREATE_OUTPUT" | grep -o 'arn:aws:elasticloadbalancing:[^"]*listener[^"]*' | head -1)
           
           if [ -z "$LISTENER_ARN" ]; then
-            echo "❌ Error: Failed to create listener"
+            echo "❌ Error: Failed to extract listener ARN"
+            echo "$LISTENER_CREATE_OUTPUT"
             exit 1
           fi
           echo "✅ Listener created: $LISTENER_ARN"
