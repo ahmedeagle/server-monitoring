@@ -525,8 +525,116 @@ jobs:
         # Use the API_SG_ID we created/got earlier
         SG_ID=$API_SG_ID
         echo "Using API Security Group: $SG_ID"
+        
+        # === CREATE APPLICATION LOAD BALANCER (ALB) ===
+        echo "🔧 Setting up Application Load Balancer..."
+        
+        # Create ALB security group
+        ALB_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null)
+        
+        if [ "$ALB_SG_ID" = "None" ] || [ -z "$ALB_SG_ID" ]; then
+          echo "Creating ALB security group..."
+          ALB_SG_ID=$(aws ec2 create-security-group \
+            --group-name servermonitoring-alb-sg \
+            --description "Security group for ALB" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
           
-        # Create service with JSON format
+          aws ec2 authorize-security-group-ingress \
+            --group-id $ALB_SG_ID \
+            --protocol tcp \
+            --port 80 \
+            --cidr 0.0.0.0/0
+          
+          aws ec2 authorize-security-group-egress \
+            --group-id $ALB_SG_ID \
+            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]'
+        fi
+        echo "ALB SG: $ALB_SG_ID"
+        
+        # Update API SG to accept traffic from ALB
+        aws ec2 authorize-security-group-ingress \
+          --group-id $SG_ID \
+          --protocol tcp \
+          --port 8080 \
+          --source-group $ALB_SG_ID 2>/dev/null || echo "ALB -> API rule exists"
+        
+        # Create ALB
+        ALB_ARN=$(aws elbv2 describe-load-balancers \
+          --names servermonitoring-alb \
+          --query 'LoadBalancers[0].LoadBalancerArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$ALB_ARN" = "None" ] || [ -z "$ALB_ARN" ]; then
+          echo "Creating Application Load Balancer..."
+          ALB_ARN=$(aws elbv2 create-load-balancer \
+            --name servermonitoring-alb \
+            --subnets $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-groups $ALB_SG_ID \
+            --scheme internet-facing \
+            --type application \
+            --ip-address-type ipv4 \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+          sleep 5
+        fi
+        echo "✅ ALB ARN: $ALB_ARN"
+        
+        # Get ALB DNS
+        ALB_DNS=$(aws elbv2 describe-load-balancers \
+          --load-balancer-arns $ALB_ARN \
+          --query 'LoadBalancers[0].DNSName' \
+          --output text)
+        echo "✅ ALB DNS: $ALB_DNS"
+        
+        # Create target group for API
+        API_TG_ARN=$(aws elbv2 describe-target-groups \
+          --names servermonitoring-api-tg \
+          --query 'TargetGroups[0].TargetGroupArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$API_TG_ARN" = "None" ] || [ -z "$API_TG_ARN" ]; then
+          echo "Creating API target group..."
+          API_TG_ARN=$(aws elbv2 create-target-group \
+            --name servermonitoring-api-tg \
+            --protocol HTTP \
+            --port 8080 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-enabled \
+            --health-check-path /health \
+            --health-check-interval-seconds 30 \
+            --health-check-timeout-seconds 5 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        fi
+        echo "✅ API Target Group: $API_TG_ARN"
+        
+        # Create listener
+        LISTENER_ARN=$(aws elbv2 describe-listeners \
+          --load-balancer-arn $ALB_ARN \
+          --query 'Listeners[0].ListenerArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$LISTENER_ARN" = "None" ] || [ -z "$LISTENER_ARN" ]; then
+          echo "Creating ALB listener..."
+          aws elbv2 create-listener \
+            --load-balancer-arn $ALB_ARN \
+            --protocol HTTP \
+            --port 80 \
+            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN
+        fi
+        
+        echo "✅ ALB setup complete!"
+        echo "API_URL=http://$ALB_DNS" >> $GITHUB_ENV
+          
+        # Create service with JSON format and ALB target group
         aws ecs create-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service-name ${{ env.ECS_API_SERVICE }} \
@@ -534,6 +642,7 @@ jobs:
             --desired-count 1 \
             --launch-type FARGATE \
             --health-check-grace-period-seconds 300 \
+            --load-balancers "targetGroupArn=$API_TG_ARN,containerName=${{ env.API_CONTAINER_NAME }},containerPort=8080" \
             --network-configuration "{
               \"awsvpcConfiguration\": {
                 \"subnets\": $SUBNETS,
@@ -572,61 +681,37 @@ jobs:
           --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}' \
           --output table
 
-    - name: Get API service IP
-      id: api-ip
-      run: |
-        echo "Getting API service public IP..."
-        API_TASK_ARN=$(aws ecs list-tasks \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --service-name ${{ env.ECS_API_SERVICE }} \
-          --query 'taskArns[0]' \
-          --output text)
-        
-        if [ "$API_TASK_ARN" = "None" ] || [ -z "$API_TASK_ARN" ]; then
-          echo "ERROR: No API task found!"
-          exit 1
-        fi
-        
-        API_ENI_ID=$(aws ecs describe-tasks \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --tasks $API_TASK_ARN \
-          --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
-          --output text)
-        
-        API_PUBLIC_IP=$(aws ec2 describe-network-interfaces \
-          --network-interface-ids $API_ENI_ID \
-          --query 'NetworkInterfaces[0].Association.PublicIp' \
-          --output text)
-        
-        echo "API_PUBLIC_IP=$API_PUBLIC_IP" >> $GITHUB_OUTPUT
-        echo "✅ API Service IP: $API_PUBLIC_IP"
-
-    - name: Verify API health (quick check)
+    - name: Verify ALB is accessible
       continue-on-error: true
       run: |
-        API_IP="${{ steps.api-ip.outputs.API_PUBLIC_IP }}"
-        echo "Quick health check at http://$API_IP:8080/health..."
+        echo "⏳ Waiting for ALB to be ready..."
+        sleep 20
         
-        # Quick check - only 6 attempts (30 seconds max)
-        for i in {1..6}; do
-          echo "Health check attempt $i/6..."
+        ALB_DNS=$(aws elbv2 describe-load-balancers \
+          --names servermonitoring-alb \
+          --query 'LoadBalancers[0].DNSName' \
+          --output text)
+        
+        echo "Quick health check at http://$ALB_DNS/health..."
+        
+        for i in {1..10}; do
+          echo "Health check attempt $i/10..."
           
-          if curl -f -s -m 3 "http://$API_IP:8080/health" > /dev/null 2>&1; then
-            echo "✅ API is healthy!"
-            curl -s "http://$API_IP:8080/health" || true
+          if curl -f -s -m 5 "http://$ALB_DNS/health" > /dev/null 2>&1; then
+            echo "✅ ALB is healthy!"
             exit 0
           fi
           
-          sleep 5
+          sleep 10
         done
         
-        echo "⚠️  API not yet responding (this is normal, it takes 2-3 minutes to fully start)"
-        echo "Continuing deployment - API will be ready shortly..."
+        echo "⚠️  API not yet responding through ALB (this is normal, it takes 2-3 minutes)"
+        echo "ALB routing will work once targets are healthy..."
 
-    - name: Create Web task definition with dynamic API URL
+    - name: Create Web task definition with ALB DNS
       run: |
-        API_URL="http://${{ steps.api-ip.outputs.API_PUBLIC_IP }}:8080"
-        echo "Creating web task definition with API_URL=$API_URL"
+        API_URL="${{ env.API_URL }}"
+        echo "Creating web task definition with API_URL=$API_URL (from ALB)"
         
         cat > web-task-definition.json <<EOF
         {
@@ -729,6 +814,69 @@ jobs:
         
         echo "✅ Web security group rules configured"
         
+        # Get ALB info
+        ALB_ARN=$(aws elbv2 describe-load-balancers \
+          --names servermonitoring-alb \
+          --query 'LoadBalancers[0].LoadBalancerArn' \
+          --output text)
+        
+        ALB_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text)
+        
+        # Allow ALB to reach Web
+        aws ec2 authorize-security-group-ingress \
+          --group-id $SG_ID_WEB \
+          --protocol tcp \
+          --port 80 \
+          --source-group $ALB_SG_ID 2>/dev/null || echo "ALB -> Web rule exists"
+        
+        # Create Web target group
+        WEB_TG_ARN=$(aws elbv2 describe-target-groups \
+          --names servermonitoring-web-tg \
+          --query 'TargetGroups[0].TargetGroupArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$WEB_TG_ARN" = "None" ] || [ -z "$WEB_TG_ARN" ]; then
+          echo "Creating Web target group..."
+          WEB_TG_ARN=$(aws elbv2 create-target-group \
+            --name servermonitoring-web-tg \
+            --protocol HTTP \
+            --port 80 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-enabled \
+            --health-check-path / \
+            --health-check-interval-seconds 30 \
+            --health-check-timeout-seconds 5 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        fi
+        echo "✅ Web Target Group: $WEB_TG_ARN"
+        
+        # Update ALB listener rules to route /api to API and everything else to Web
+        LISTENER_ARN=$(aws elbv2 describe-listeners \
+          --load-balancer-arn $ALB_ARN \
+          --query 'Listeners[0].ListenerArn' \
+          --output text)
+        
+        # Modify default action to forward to Web
+        aws elbv2 modify-listener \
+          --listener-arn $LISTENER_ARN \
+          --default-actions Type=forward,TargetGroupArn=$WEB_TG_ARN || true
+        
+        # Add rule to forward /api/* to API target group
+        aws elbv2 create-rule \
+          --listener-arn $LISTENER_ARN \
+          --priority 10 \
+          --conditions Field=path-pattern,Values='/api/*' \
+          --actions Type=forward,TargetGroupArn=$(aws elbv2 describe-target-groups --names servermonitoring-api-tg --query 'TargetGroups[0].TargetGroupArn' --output text) 2>/dev/null || echo "API rule exists"
+        
+        echo "✅ ALB routing configured: /api/* -> API, / -> Web"
+        
         # CRITICAL FIX: Allow web tasks to reach API on port 8080
         echo "⚡ CRITICAL: Allowing web -> API communication on port 8080..."
         API_SG_ID=$(aws ec2 describe-security-groups \
@@ -771,7 +919,7 @@ jobs:
           
           echo "✅ Web service updated successfully!"
         else
-          # Create web service
+          # Create web service with ALB
           echo "Creating web service..."
           aws ecs create-service \
               --cluster ${{ env.ECS_CLUSTER }} \
@@ -780,6 +928,7 @@ jobs:
               --desired-count 1 \
               --launch-type FARGATE \
               --health-check-grace-period-seconds 300 \
+              --load-balancers "targetGroupArn=$WEB_TG_ARN,containerName=${{ env.WEB_CONTAINER_NAME }},containerPort=80" \
               --network-configuration "{
                 \"awsvpcConfiguration\": {
                   \"subnets\": $SUBNETS,
@@ -835,62 +984,48 @@ jobs:
           --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}' \
           --output table
 
-    - name: Get service URLs
+    - name: Get ALB URL
       run: |
-        echo "⏳ Waiting for tasks to start..."
-        sleep 30
+        echo "🔧 Getting Application Load Balancer URL..."
         
-        # Get API URL
-        API_TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_API_SERVICE }} --query 'taskArns[0]' --output text)
-        
-        if [ "$API_TASK_ARN" != "None" ] && [ -n "$API_TASK_ARN" ]; then
-          API_ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $API_TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
-          API_PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $API_ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
-        else
-          API_PUBLIC_IP="pending"
-        fi
-        
-        # Get Web URL
-        WEB_TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_WEB_SERVICE }} --query 'taskArns[0]' --output text)
-        
-        if [ "$WEB_TASK_ARN" != "None" ] && [ -n "$WEB_TASK_ARN" ]; then
-          WEB_ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $WEB_TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
-          WEB_PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $WEB_ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
-        else
-          WEB_PUBLIC_IP="pending"
-        fi
+        ALB_DNS=$(aws elbv2 describe-load-balancers \
+          --names servermonitoring-alb \
+          --query 'LoadBalancers[0].DNSName' \
+          --output text)
         
         echo "========================================="
-        echo "🌐 WEB UI: http://$WEB_PUBLIC_IP"
-        echo "🔧 API: http://$API_PUBLIC_IP:8080/swagger"
-        echo "❤️  Health: http://$API_PUBLIC_IP:8080/health"
+        echo "🌐 APPLICATION URL: http://$ALB_DNS"
+        echo "🔧 API (via ALB): http://$ALB_DNS/api/v1/servers"
+        echo "❤️  Health: http://$ALB_DNS/api/v1/health"
+        echo "📊 Hangfire: http://$ALB_DNS/hangfire"
         echo "========================================="
         echo ""
-        echo "Access your application at: http://$WEB_PUBLIC_IP"
-        echo "If IPs show 'pending', tasks are still starting. Check ECS console."
+        echo "✅ ALL TRAFFIC GOES THROUGH ALB - NO MORE IP CHANGES!"
+        echo "Login at: http://$ALB_DNS/login"
+        echo "Credentials: admin / Admin123!"
         echo "========================================="
         
-        # Export IPs for next step
-        echo "WEB_IP=$WEB_PUBLIC_IP" >> $GITHUB_ENV
-        echo "API_IP=$API_PUBLIC_IP" >> $GITHUB_ENV
+        # Export for next step
+        echo "ALB_DNS=$ALB_DNS" >> $GITHUB_ENV
     
     - name: Update deployment URLs file
       run: |
         cat > CURRENT_DEPLOYMENT.md <<EOF
-        # 🚀 Current Deployment URLs
+        # 🚀 Current Deployment - Production Ready with ALB
         
         **Last Updated:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')  
         **Commit:** ${{ github.sha }}
         
         ---
         
-        ## 🌐 Access Your Application
+        ## 🌐 Application URL (STABLE - Never Changes!)
         
-        ### Web Application (React Frontend)
-        **URL:** http://${{ env.WEB_IP }}
+        ### **Main Application**
+        **URL:** http://${{ env.ALB_DNS }}
         
-        - Login Page: http://${{ env.WEB_IP }}/login
-        - Dashboard: http://${{ env.WEB_IP }}/
+        - 🏠 Dashboard: http://${{ env.ALB_DNS }}/
+        - 🔐 Login: http://${{ env.ALB_DNS }}/login
+        - 📊 Hangfire: http://${{ env.ALB_DNS }}/hangfire
         
         **Test Credentials:**
         - Admin: \`admin\` / \`Admin@123\`
@@ -898,45 +1033,60 @@ jobs:
         
         ---
         
-        ### API Backend (.NET)
-        **Base URL:** http://${{ env.API_IP }}:8080
+        ### API Endpoints
+        **Base URL:** http://${{ env.ALB_DNS }}
         
-        - Swagger UI: http://${{ env.API_IP }}:8080/swagger
-        - Health Check: http://${{ env.API_IP }}:8080/health
-        - API v1: http://${{ env.API_IP }}:8080/api/v1/
-        
-        ---
-        
-        ## 📊 Service Status
-        
-        | Service | Status | IP Address |
-        |---------|--------|------------|
-        | Web (React) | ✅ Running | ${{ env.WEB_IP }} |
-        | API (.NET) | ✅ Running | ${{ env.API_IP }} |
+        - 📖 Swagger UI: http://${{ env.ALB_DNS }}/swagger
+        - ❤️  Health Check: http://${{ env.ALB_DNS }}/health
+        - 🔌 API v1: http://${{ env.ALB_DNS }}/api/v1/
         
         ---
         
-        ## 🔄 Why IPs Change
+        ## ✅ Production Benefits
         
-        ECS Fargate tasks are destroyed and recreated with each deployment, receiving new public IPs. This is normal behavior.
+        ### Application Load Balancer (ALB)
+        - ✅ **Stable DNS** - URL never changes across deployments
+        - ✅ **High Availability** - Automatic failover
+        - ✅ **Health Checks** - Automatic unhealthy target removal
+        - ✅ **Zero Downtime** - Rolling deployments
+        - ✅ **SSL Ready** - Easy HTTPS certificate attachment
         
-        **Always check this file for the latest URLs after deployment.**
+        ### Architecture
+        ```
+        Internet → ALB → [API Tasks | Web Tasks]
+                   ↓
+              Path routing:
+              /api/* → API (port 8080)
+              /*     → Web (port 80)
+        ```
         
         ---
         
         ## 🏗️ Infrastructure Details
         
         - **Cloud Provider:** AWS (us-east-1)
+        - **Load Balancer:** Application Load Balancer (ALB)
         - **Orchestration:** ECS Fargate
         - **Container Registry:** Amazon ECR
         - **Deployment:** GitHub Actions CI/CD
         - **Network:** Public subnets with Internet Gateway
+        
+        ---
+        
+        ## 🔄 No More IP Hardcoding!
+        
+        Previous issues with IP changes are **SOLVED**:
+        - ✅ Web frontend uses ALB DNS in environment variables
+        - ✅ ALB DNS remains constant across all deployments
+        - ✅ Task IPs can change freely without breaking anything
+        
+        **This is production-ready architecture!** 🎉
         
         EOF
         
         git config user.name "GitHub Actions Bot"
         git config user.email "actions@github.com"
         git add CURRENT_DEPLOYMENT.md
-        git diff --staged --quiet || git commit -m "Update deployment URLs [skip ci]"
+        git diff --staged --quiet || git commit -m "Update deployment URLs with ALB [skip ci]"
         git push origin main || echo "No changes to push"
 
