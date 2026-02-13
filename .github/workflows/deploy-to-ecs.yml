@@ -341,6 +341,136 @@ jobs:
         TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://api-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
+    - name: Setup Application Load Balancer
+      run: |
+        echo "🔧 Setting up Application Load Balancer..."
+        
+        # Get network info
+        SUBNETS=$(aws ec2 describe-subnets --query 'Subnets[*].SubnetId' --output json)
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        
+        # Create ALB security group
+        ALB_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null)
+        
+        if [ "$ALB_SG_ID" = "None" ] || [ -z "$ALB_SG_ID" ]; then
+          echo "Creating ALB security group..."
+          ALB_SG_ID=$(aws ec2 create-security-group \
+            --group-name servermonitoring-alb-sg \
+            --description "Security group for ALB" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
+          
+          aws ec2 authorize-security-group-ingress \
+            --group-id $ALB_SG_ID \
+            --protocol tcp \
+            --port 80 \
+            --cidr 0.0.0.0/0 2>/dev/null || true
+          
+          aws ec2 authorize-security-group-egress \
+            --group-id $ALB_SG_ID \
+            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' 2>/dev/null || true
+        else
+          echo "Using existing ALB security group: $ALB_SG_ID"
+        fi
+        echo "ALB SG: $ALB_SG_ID"
+        
+        # Update API SG to accept traffic from ALB
+        API_SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=servermonitoring-api-sg" "Name=vpc-id,Values=$VPC_ID" \
+          --query 'SecurityGroups[0].GroupId' \
+          --output text 2>/dev/null)
+        
+        if [ "$API_SG_ID" != "None" ] && [ -n "$API_SG_ID" ]; then
+          aws ec2 authorize-security-group-ingress \
+            --group-id $API_SG_ID \
+            --protocol tcp \
+            --port 8080 \
+            --source-group $ALB_SG_ID 2>/dev/null || echo "ALB -> API rule exists"
+        fi
+        
+        # Create ALB
+        ALB_ARN=$(aws elbv2 describe-load-balancers \
+          --names servermonitoring-alb \
+          --query 'LoadBalancers[0].LoadBalancerArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$ALB_ARN" = "None" ] || [ -z "$ALB_ARN" ] || [ "$ALB_ARN" = "null" ]; then
+          echo "Creating Application Load Balancer..."
+          ALB_ARN=$(aws elbv2 create-load-balancer \
+            --name servermonitoring-alb \
+            --subnets $(echo $SUBNETS | jq -r 'join(" ")') \
+            --security-groups $ALB_SG_ID \
+            --scheme internet-facing \
+            --type application \
+            --ip-address-type ipv4 \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+          echo "Waiting for ALB to become active..."
+          aws elbv2 wait load-balancer-available --load-balancer-arns $ALB_ARN
+        else
+          echo "Using existing ALB: $ALB_ARN"
+        fi
+        
+        # Get ALB DNS
+        ALB_DNS=$(aws elbv2 describe-load-balancers \
+          --load-balancer-arns $ALB_ARN \
+          --query 'LoadBalancers[0].DNSName' \
+          --output text)
+        echo "✅ ALB DNS: $ALB_DNS"
+        
+        # Create target group for API
+        API_TG_ARN=$(aws elbv2 describe-target-groups \
+          --names servermonitoring-api-tg \
+          --query 'TargetGroups[0].TargetGroupArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$API_TG_ARN" = "None" ] || [ -z "$API_TG_ARN" ] || [ "$API_TG_ARN" = "null" ]; then
+          echo "Creating API target group..."
+          API_TG_ARN=$(aws elbv2 create-target-group \
+            --name servermonitoring-api-tg \
+            --protocol HTTP \
+            --port 8080 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-enabled \
+            --health-check-path /health \
+            --health-check-interval-seconds 30 \
+            --health-check-timeout-seconds 5 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        else
+          echo "Using existing API target group: $API_TG_ARN"
+        fi
+        echo "✅ API Target Group: $API_TG_ARN"
+        
+        # Create listener
+        LISTENER_ARN=$(aws elbv2 describe-listeners \
+          --load-balancer-arn $ALB_ARN \
+          --query 'Listeners[0].ListenerArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$LISTENER_ARN" = "None" ] || [ -z "$LISTENER_ARN" ] || [ "$LISTENER_ARN" = "null" ]; then
+          echo "Creating ALB listener..."
+          aws elbv2 create-listener \
+            --load-balancer-arn $ALB_ARN \
+            --protocol HTTP \
+            --port 80 \
+            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN
+        else
+          echo "Using existing listener: $LISTENER_ARN"
+        fi
+        
+        echo "✅ ALB setup complete!"
+        echo "API_URL=http://$ALB_DNS" >> $GITHUB_ENV
+        echo "ALB_ARN=$ALB_ARN" >> $GITHUB_ENV
+        echo "API_TG_ARN=$API_TG_ARN" >> $GITHUB_ENV
+
     - name: Deploy to ECS
       run: |
         # Get network info first (needed for both create and update)
@@ -526,115 +656,13 @@ jobs:
         SG_ID=$API_SG_ID
         echo "Using API Security Group: $SG_ID"
         
-        # === CREATE APPLICATION LOAD BALANCER (ALB) ===
-        echo "🔧 Setting up Application Load Balancer..."
-        
-        # Create ALB security group
-        ALB_SG_ID=$(aws ec2 describe-security-groups \
-          --filters "Name=group-name,Values=servermonitoring-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
-          --query 'SecurityGroups[0].GroupId' \
-          --output text 2>/dev/null)
-        
-        if [ "$ALB_SG_ID" = "None" ] || [ -z "$ALB_SG_ID" ]; then
-          echo "Creating ALB security group..."
-          ALB_SG_ID=$(aws ec2 create-security-group \
-            --group-name servermonitoring-alb-sg \
-            --description "Security group for ALB" \
-            --vpc-id $VPC_ID \
-            --query 'GroupId' \
-            --output text)
+        # Use ALB created in previous step
+        echo "Using ALB from previous step..."
+        echo "ALB ARN: ${{ env.ALB_ARN }}"
+        echo "API Target Group: ${{ env.API_TG_ARN }}"
+        echo "API URL: ${{ env.API_URL }}"
           
-          aws ec2 authorize-security-group-ingress \
-            --group-id $ALB_SG_ID \
-            --protocol tcp \
-            --port 80 \
-            --cidr 0.0.0.0/0
-          
-          aws ec2 authorize-security-group-egress \
-            --group-id $ALB_SG_ID \
-            --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]'
-        fi
-        echo "ALB SG: $ALB_SG_ID"
-        
-        # Update API SG to accept traffic from ALB
-        aws ec2 authorize-security-group-ingress \
-          --group-id $SG_ID \
-          --protocol tcp \
-          --port 8080 \
-          --source-group $ALB_SG_ID 2>/dev/null || echo "ALB -> API rule exists"
-        
-        # Create ALB
-        ALB_ARN=$(aws elbv2 describe-load-balancers \
-          --names servermonitoring-alb \
-          --query 'LoadBalancers[0].LoadBalancerArn' \
-          --output text 2>/dev/null)
-        
-        if [ "$ALB_ARN" = "None" ] || [ -z "$ALB_ARN" ]; then
-          echo "Creating Application Load Balancer..."
-          ALB_ARN=$(aws elbv2 create-load-balancer \
-            --name servermonitoring-alb \
-            --subnets $(echo $SUBNETS | jq -r 'join(" ")') \
-            --security-groups $ALB_SG_ID \
-            --scheme internet-facing \
-            --type application \
-            --ip-address-type ipv4 \
-            --query 'LoadBalancers[0].LoadBalancerArn' \
-            --output text)
-          sleep 5
-        fi
-        echo "✅ ALB ARN: $ALB_ARN"
-        
-        # Get ALB DNS
-        ALB_DNS=$(aws elbv2 describe-load-balancers \
-          --load-balancer-arns $ALB_ARN \
-          --query 'LoadBalancers[0].DNSName' \
-          --output text)
-        echo "✅ ALB DNS: $ALB_DNS"
-        
-        # Create target group for API
-        API_TG_ARN=$(aws elbv2 describe-target-groups \
-          --names servermonitoring-api-tg \
-          --query 'TargetGroups[0].TargetGroupArn' \
-          --output text 2>/dev/null)
-        
-        if [ "$API_TG_ARN" = "None" ] || [ -z "$API_TG_ARN" ]; then
-          echo "Creating API target group..."
-          API_TG_ARN=$(aws elbv2 create-target-group \
-            --name servermonitoring-api-tg \
-            --protocol HTTP \
-            --port 8080 \
-            --vpc-id $VPC_ID \
-            --target-type ip \
-            --health-check-enabled \
-            --health-check-path /health \
-            --health-check-interval-seconds 30 \
-            --health-check-timeout-seconds 5 \
-            --healthy-threshold-count 2 \
-            --unhealthy-threshold-count 3 \
-            --query 'TargetGroups[0].TargetGroupArn' \
-            --output text)
-        fi
-        echo "✅ API Target Group: $API_TG_ARN"
-        
-        # Create listener
-        LISTENER_ARN=$(aws elbv2 describe-listeners \
-          --load-balancer-arn $ALB_ARN \
-          --query 'Listeners[0].ListenerArn' \
-          --output text 2>/dev/null)
-        
-        if [ "$LISTENER_ARN" = "None" ] || [ -z "$LISTENER_ARN" ]; then
-          echo "Creating ALB listener..."
-          aws elbv2 create-listener \
-            --load-balancer-arn $ALB_ARN \
-            --protocol HTTP \
-            --port 80 \
-            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN
-        fi
-        
-        echo "✅ ALB setup complete!"
-        echo "API_URL=http://$ALB_DNS" >> $GITHUB_ENV
-          
-        # Create service with JSON format and ALB target group
+        # Create service with ALB target group
         aws ecs create-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service-name ${{ env.ECS_API_SERVICE }} \
@@ -642,7 +670,7 @@ jobs:
             --desired-count 1 \
             --launch-type FARGATE \
             --health-check-grace-period-seconds 300 \
-            --load-balancers "targetGroupArn=$API_TG_ARN,containerName=${{ env.API_CONTAINER_NAME }},containerPort=8080" \
+            --load-balancers "targetGroupArn=${{ env.API_TG_ARN }},containerName=${{ env.API_CONTAINER_NAME }},containerPort=8080" \
             --network-configuration "{
               \"awsvpcConfiguration\": {
                 \"subnets\": $SUBNETS,
@@ -773,6 +801,64 @@ jobs:
         echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
         echo "✅ Web task definition registered: $TASK_DEF_ARN"
 
+    - name: Setup Web Target Group and ALB Routing
+      run: |
+        echo "🔧 Setting up Web target group and ALB routing..."
+        
+        VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        ALB_ARN="${{ env.ALB_ARN }}"
+        
+        # Create Web target group
+        WEB_TG_ARN=$(aws elbv2 describe-target-groups \
+          --names servermonitoring-web-tg \
+          --query 'TargetGroups[0].TargetGroupArn' \
+          --output text 2>/dev/null)
+        
+        if [ "$WEB_TG_ARN" = "None" ] || [ -z "$WEB_TG_ARN" ] || [ "$WEB_TG_ARN" = "null" ]; then
+          echo "Creating Web target group..."
+          WEB_TG_ARN=$(aws elbv2 create-target-group \
+            --name servermonitoring-web-tg \
+            --protocol HTTP \
+            --port 80 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-enabled \
+            --health-check-path / \
+            --health-check-interval-seconds 30 \
+            --health-check-timeout-seconds 5 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        else
+          echo "Using existing Web target group: $WEB_TG_ARN"
+        fi
+        echo "✅ Web Target Group: $WEB_TG_ARN"
+        
+        # Get listener
+        LISTENER_ARN=$(aws elbv2 describe-listeners \
+          --load-balancer-arn $ALB_ARN \
+          --query 'Listeners[0].ListenerArn' \
+          --output text)
+        
+        # Modify default action to forward to Web
+        echo "Setting Web as default target..."
+        aws elbv2 modify-listener \
+          --listener-arn $LISTENER_ARN \
+          --default-actions Type=forward,TargetGroupArn=$WEB_TG_ARN || true
+        
+        # Add rule to forward /api/* to API target group
+        API_TG_ARN="${{ env.API_TG_ARN }}"
+        echo "Adding /api/* routing rule..."
+        aws elbv2 create-rule \
+          --listener-arn $LISTENER_ARN \
+          --priority 10 \
+          --conditions Field=path-pattern,Values='/api/*' Field=path-pattern,Values='/swagger*' Field=path-pattern,Values='/health' Field=path-pattern,Values='/hangfire*' \
+          --actions Type=forward,TargetGroupArn=$API_TG_ARN 2>/dev/null || echo "API routing rule exists"
+        
+        echo "✅ ALB routing configured: /api/* -> API, / -> Web"
+        echo "WEB_TG_ARN=$WEB_TG_ARN" >> $GITHUB_ENV
+
     - name: Deploy Web to ECS
       run: |
         # Get subnets and VPC (already created from API deployment)
@@ -814,12 +900,7 @@ jobs:
         
         echo "✅ Web security group rules configured"
         
-        # Get ALB info
-        ALB_ARN=$(aws elbv2 describe-load-balancers \
-          --names servermonitoring-alb \
-          --query 'LoadBalancers[0].LoadBalancerArn' \
-          --output text)
-        
+        # Get ALB SG to allow ALB -> Web traffic
         ALB_SG_ID=$(aws ec2 describe-security-groups \
           --filters "Name=group-name,Values=servermonitoring-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
           --query 'SecurityGroups[0].GroupId' \
@@ -832,50 +913,9 @@ jobs:
           --port 80 \
           --source-group $ALB_SG_ID 2>/dev/null || echo "ALB -> Web rule exists"
         
-        # Create Web target group
-        WEB_TG_ARN=$(aws elbv2 describe-target-groups \
-          --names servermonitoring-web-tg \
-          --query 'TargetGroups[0].TargetGroupArn' \
-          --output text 2>/dev/null)
-        
-        if [ "$WEB_TG_ARN" = "None" ] || [ -z "$WEB_TG_ARN" ]; then
-          echo "Creating Web target group..."
-          WEB_TG_ARN=$(aws elbv2 create-target-group \
-            --name servermonitoring-web-tg \
-            --protocol HTTP \
-            --port 80 \
-            --vpc-id $VPC_ID \
-            --target-type ip \
-            --health-check-enabled \
-            --health-check-path / \
-            --health-check-interval-seconds 30 \
-            --health-check-timeout-seconds 5 \
-            --healthy-threshold-count 2 \
-            --unhealthy-threshold-count 3 \
-            --query 'TargetGroups[0].TargetGroupArn' \
-            --output text)
-        fi
-        echo "✅ Web Target Group: $WEB_TG_ARN"
-        
-        # Update ALB listener rules to route /api to API and everything else to Web
-        LISTENER_ARN=$(aws elbv2 describe-listeners \
-          --load-balancer-arn $ALB_ARN \
-          --query 'Listeners[0].ListenerArn' \
-          --output text)
-        
-        # Modify default action to forward to Web
-        aws elbv2 modify-listener \
-          --listener-arn $LISTENER_ARN \
-          --default-actions Type=forward,TargetGroupArn=$WEB_TG_ARN || true
-        
-        # Add rule to forward /api/* to API target group
-        aws elbv2 create-rule \
-          --listener-arn $LISTENER_ARN \
-          --priority 10 \
-          --conditions Field=path-pattern,Values='/api/*' \
-          --actions Type=forward,TargetGroupArn=$(aws elbv2 describe-target-groups --names servermonitoring-api-tg --query 'TargetGroups[0].TargetGroupArn' --output text) 2>/dev/null || echo "API rule exists"
-        
-        echo "✅ ALB routing configured: /api/* -> API, / -> Web"
+        # Use Web TG from previous step
+        WEB_TG_ARN="${{ env.WEB_TG_ARN }}"
+        echo "Using Web Target Group: $WEB_TG_ARN"
         
         # CRITICAL FIX: Allow web tasks to reach API on port 8080
         echo "⚡ CRITICAL: Allowing web -> API communication on port 8080..."
@@ -896,14 +936,6 @@ jobs:
         else
           echo "⚠️  WARNING: Could not find API security group"
         fi
-        
-        # Allow web tasks to access VPC endpoints (ECR)
-        echo "Adding VPC endpoint access for web tasks..."
-        aws ec2 authorize-security-group-ingress \
-            --group-id sg-0796900368936631a \
-            --protocol tcp \
-            --port 443 \
-            --source-group $SG_ID_WEB 2>/dev/null || echo "VPC endpoint rule may already exist"
         
         # Check if web service exists
         WEB_SERVICE_EXISTS=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_WEB_SERVICE }} --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
