@@ -35,7 +35,7 @@ public class UnitOfWork : IUnitOfWork
     public IMetricRepository Metrics => _metrics ??= (IMetricRepository)new Repository<Domain.Entities.Metric>(_context);
     public IDiskRepository Disks => _disks ??= (IDiskRepository)new Repository<Domain.Entities.Disk>(_context);
     public IAlertRepository Alerts => _alerts ??= (IAlertRepository)new Repository<Domain.Entities.Alert>(_context);
-    public IReportRepository Reports => _reports ??= (IReportRepository)new Repository<Domain.Entities.Report>(_context);
+    public IReportRepository Reports => _reports ??= new ReportRepository(_context);
     public IUserRoleRepository UserRoles => _userRoles ??= (IUserRoleRepository)new Repository<Domain.Entities.UserRole>(_context);
 
     /// <summary>
