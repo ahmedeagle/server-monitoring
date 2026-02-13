@@ -677,7 +677,11 @@ jobs:
           fi
           echo "✅ Listener created: $LISTENER_ARN"
         else
-          echo "Using existing listener: $LISTENER_ARN"
+          echo "Listener already exists - updating to point to current API target group..."
+          aws elbv2 modify-listener \
+            --listener-arn $LISTENER_ARN \
+            --default-actions Type=forward,TargetGroupArn=$API_TG_ARN
+          echo "✅ Listener updated: $LISTENER_ARN"
         fi
         
         echo "✅ ALB setup complete!"
@@ -1114,16 +1118,27 @@ jobs:
         echo "Setting Web as default target..."
         aws elbv2 modify-listener \
           --listener-arn $LISTENER_ARN \
-          --default-actions Type=forward,TargetGroupArn=$WEB_TG_ARN || true
+          --default-actions Type=forward,TargetGroupArn=$WEB_TG_ARN
         
-        # Add rule to forward /api/* to API target group
+        # Delete existing rules then recreate (to ensure they point to current target groups)
         API_TG_ARN="${{ env.API_TG_ARN }}"
-        echo "Adding /api/* routing rule..."
+        echo "Updating /api/* routing rule to current target group..."
+        
+        # Get existing rules and delete non-default ones
+        EXISTING_RULES=$(aws elbv2 describe-rules --listener-arn $LISTENER_ARN --query 'Rules[?Priority!=`default`].RuleArn' --output text 2>/dev/null || echo "")
+        for RULE_ARN in $EXISTING_RULES; do
+          echo "Deleting old rule: $RULE_ARN"
+          aws elbv2 delete-rule --rule-arn $RULE_ARN 2>/dev/null || true
+        done
+        
+        # Create fresh rule with current target group ARN
         aws elbv2 create-rule \
           --listener-arn $LISTENER_ARN \
           --priority 10 \
           --conditions Field=path-pattern,Values='/api/*' Field=path-pattern,Values='/swagger*' Field=path-pattern,Values='/health' Field=path-pattern,Values='/hangfire*' \
-          --actions Type=forward,TargetGroupArn=$API_TG_ARN 2>/dev/null || echo "API routing rule exists"
+          --actions Type=forward,TargetGroupArn=$API_TG_ARN
+        
+        echo "✅ Routing rules updated with current target groups"
         
         echo "✅ ALB routing configured: /api/* -> API, / -> Web"
         echo "WEB_TG_ARN=$WEB_TG_ARN" >> $GITHUB_ENV
