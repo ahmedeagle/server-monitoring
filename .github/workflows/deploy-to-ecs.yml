@@ -1019,14 +1019,40 @@ jobs:
       run: |
         echo "🔧 Setting up Web target group and ALB routing..."
         
+        # Get VPC ID
         VPC_ID=$(aws ec2 describe-subnets --query 'Subnets[0].VpcId' --output text)
+        echo "VPC ID: $VPC_ID"
+        
+        if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+          echo "❌ Error: Could not get VPC ID"
+          exit 1
+        fi
+        
+        # Get ALB ARN from environment
         ALB_ARN="${{ env.ALB_ARN }}"
+        echo "ALB ARN: $ALB_ARN"
+        
+        if [ -z "$ALB_ARN" ]; then
+          echo "❌ Error: ALB_ARN environment variable is empty"
+          echo "This should have been set in the 'Setup Application Load Balancer' step"
+          exit 1
+        fi
+        
+        # Get API Target Group ARN from environment
+        API_TG_ARN="${{ env.API_TG_ARN }}"
+        echo "API Target Group ARN: $API_TG_ARN"
+        
+        if [ -z "$API_TG_ARN" ]; then
+          echo "❌ Error: API_TG_ARN environment variable is empty"
+          exit 1
+        fi
         
         # Create Web target group
+        echo "🔍 Checking if Web target group exists..."
         WEB_TG_ARN=$(aws elbv2 describe-target-groups \
           --names servermonitoring-web-tg \
           --query 'TargetGroups[0].TargetGroupArn' \
-          --output text 2>/dev/null)
+          --output text 2>/dev/null || echo "None")
         
         if [ "$WEB_TG_ARN" = "None" ] || [ -z "$WEB_TG_ARN" ] || [ "$WEB_TG_ARN" = "null" ]; then
           echo "Creating Web target group..."
