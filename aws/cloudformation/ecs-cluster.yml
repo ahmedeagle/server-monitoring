@@ -429,6 +429,7 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-ECS-SecurityGroup
 
+
   RDSSecurityGroupId:
     Description: RDS Security Group ID
     Value: !Ref RDSSecurityGroup
