@@ -63,6 +63,7 @@ const ServerDetailsPage = () => {
     return <Typography>Server not found</Typography>
   }
 
+  
   const chartData = metrics.map((m) => {
     const date = new Date(m.recordedAt)
     const time = isNaN(date.getTime()) ? 'N/A' : format(date, 'HH:mm')
